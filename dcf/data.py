@@ -47,6 +47,7 @@ _CASH_LABELS = [
     "Cash Cash Equivalents And Short Term Investments",
     "Cash Financial",
 ]
+_SHARES_LABELS = ["Ordinary Shares Number", "Share Issued", "Common Stock Shares Outstanding"]
 
 
 @dataclass
@@ -165,6 +166,14 @@ def fetch_company_data(ticker: str) -> CompanyData:
     data.current_price = (
         fast.get("last_price") or info.get("currentPrice") or info.get("regularMarketPrice")
     )
+    # Price fallback: last close from history (a lighter endpoint than .info).
+    if not data.current_price:
+        try:
+            h = tk.history(period="5d")
+            if not h.empty:
+                data.current_price = float(h["Close"].dropna().iloc[-1])
+        except Exception:
+            pass
     data.shares_outstanding = info.get("sharesOutstanding") or fast.get("shares")
     data.market_cap = info.get("marketCap") or fast.get("market_cap")
     data.beta = info.get("beta")
@@ -232,6 +241,16 @@ def fetch_company_data(ticker: str) -> CompanyData:
     data.cash = _latest(_find_row(balance, _CASH_LABELS))
     if data.total_debt is not None:
         data.net_debt = data.total_debt - (data.cash or 0.0)
+
+    # Shares fallback from the balance sheet when .info/.fast_info didn't supply it.
+    if not data.shares_outstanding:
+        sh = _latest(_find_row(balance, _SHARES_LABELS))
+        if sh and sh > 0:
+            data.shares_outstanding = sh
+
+    # Market-cap fallback = price × shares (avoids depending on the flaky .info endpoint).
+    if not data.market_cap and data.current_price and data.shares_outstanding:
+        data.market_cap = data.current_price * data.shares_outstanding
 
     # --- Effective tax rate ----------------------------------------------------------
     if data.tax_expense is not None and data.pretax_income not in (None, 0):
@@ -341,8 +360,8 @@ def compute_default_assumptions(data: CompanyData) -> dict:
         defaults["fcf_margin"] = round(float(np.clip(data.fcf_latest / data.revenue, -0.10, 0.60)), 4)
 
     # Exit multiple from current EV/EBITDA if we can estimate EV.
-    if data.ebitda and data.ebitda > 0 and data.market_cap and data.net_debt is not None:
-        ev = data.market_cap + data.net_debt
+    if data.ebitda and data.ebitda > 0 and data.market_cap:
+        ev = data.market_cap + (data.net_debt or 0.0)
         mult = ev / data.ebitda
         if np.isfinite(mult) and mult > 0:
             defaults["exit_multiple"] = round(float(np.clip(mult, 4.0, 30.0)), 1)

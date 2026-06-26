@@ -170,6 +170,12 @@ with st.sidebar:
         use_exit = st.checkbox("Exit multiple (EV/EBITDA)", value=True, key="inp_exit")
         exit_multiple = st.number_input("Exit EV/EBITDA multiple", 2.0, 40.0,
                                         float(defaults["exit_multiple"]), 0.5, key="inp_mult")
+        if data.ebitda and data.market_cap:
+            st.caption(f"Auto default {defaults['exit_multiple']:.1f}x from the company's current "
+                       "implied EV/EBITDA.")
+        else:
+            st.caption("Current EV/EBITDA couldn't be derived (EBITDA or market cap unavailable) — "
+                       "using a generic 12.0x. Adjust to your sector's typical multiple.")
 
     generate = st.button("🚀 Generate Valuation", type="primary", use_container_width=True)
 
