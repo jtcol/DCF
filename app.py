@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from dcf import sp500
 from dcf.data import CompanyData, compute_default_assumptions, fetch_company_data, get_risk_free_rate
 from dcf.formatting import fmt_big, fmt_currency, fmt_multiple, fmt_pct
-from dcf.model import Assumptions, estimate_wacc, run_dcf
+from dcf.model import Assumptions, run_dcf
 from dcf.quality import assess, severity_rank
 from dcf.reverse_dcf import solve_implied_growth
 
@@ -148,8 +148,12 @@ with st.sidebar:
     cost_of_debt = cost_of_debt_default
     equity_w = equity_w_default
     debt_w = debt_w_default
-    auto_wacc, auto_coe, _ = estimate_wacc(risk_free, beta, erp, cost_of_debt,
-                                           defaults["tax_rate"], equity_w, debt_w)
+    # Auto WACC (CAPM): cost of equity + after-tax cost of debt at market weights.
+    auto_coe = risk_free + beta * erp
+    auto_atcod = cost_of_debt * (1 - defaults["tax_rate"])
+    _tw = equity_w + debt_w
+    _ew, _dw = (equity_w / _tw, debt_w / _tw) if _tw > 0 else (1.0, 0.0)
+    auto_wacc = _ew * auto_coe + _dw * auto_atcod
     st.markdown("**Discount rate (WACC)**")
     wacc_pct = st.number_input(
         "WACC (%)", 1.0, 30.0, round(auto_wacc * 100, 2), 0.1, key="inp_wacc",
