@@ -33,6 +33,12 @@ _DA_LABELS = [
 _CAPEX_LABELS = ["Capital Expenditure", "Capital Expenditures", "Purchase Of PPE"]
 _CHG_WC_LABELS = ["Change In Working Capital", "Changes In Working Capital"]
 _FCF_LABELS = ["Free Cash Flow"]
+_OCF_LABELS = [
+    "Operating Cash Flow",
+    "Total Cash From Operating Activities",
+    "Cash Flow From Continuing Operating Activities",
+    "Cash Flowsfromusedin Operating Activities Direct",
+]
 _DEBT_LABELS = ["Total Debt"]
 _LT_DEBT_LABELS = ["Long Term Debt", "Long Term Debt And Capital Lease Obligation"]
 _CURR_DEBT_LABELS = ["Current Debt", "Current Debt And Capital Lease Obligation"]
@@ -74,6 +80,11 @@ class CompanyData:
     net_debt: Optional[float] = None
     effective_tax_rate: Optional[float] = None
     fcf_latest: Optional[float] = None  # reported Free Cash Flow if available
+
+    # Trailing-twelve-month (TTM) free cash flow, summed from the last 4 quarters
+    fcf_ttm: Optional[float] = None
+    revenue_ttm: Optional[float] = None
+    fcf_margin_ttm: Optional[float] = None
 
     # Historical series (index = period end date, most recent first)
     hist_revenue: pd.Series = field(default_factory=pd.Series)
@@ -196,6 +207,17 @@ def fetch_company_data(ticker: str) -> CompanyData:
     data.tax_expense = _latest(_find_row(income, _TAX_LABELS))
     data.fcf_latest = _latest(fcf_row)
 
+    # --- Trailing-twelve-month FCF (sum of last 4 quarters) --------------------------
+    try:
+        q_cashflow = tk.quarterly_cashflow
+    except Exception:
+        q_cashflow = pd.DataFrame()
+    try:
+        q_income = tk.quarterly_income_stmt
+    except Exception:
+        q_income = pd.DataFrame()
+    data.fcf_ttm, data.revenue_ttm, data.fcf_margin_ttm = _compute_ttm_fcf(q_cashflow, q_income)
+
     # EBITDA fallback = EBIT + D&A
     if data.ebitda is None and data.ebit is not None and data.da is not None:
         data.ebitda = data.ebit + data.da
@@ -243,6 +265,34 @@ def fetch_company_data(ticker: str) -> CompanyData:
     return data
 
 
+def _ttm_sum(df: pd.DataFrame, labels: list[str], n: int = 4) -> Optional[float]:
+    """Sum the most recent ``n`` quarterly values of the first matching row."""
+    row = _find_row(df, labels)
+    if row is None or len(row) == 0:
+        return None
+    vals = row.iloc[:n].dropna()
+    if len(vals) == 0:
+        return None
+    return float(vals.sum())
+
+
+def _compute_ttm_fcf(q_cashflow: pd.DataFrame, q_income: pd.DataFrame):
+    """Trailing-twelve-month FCF, revenue, and FCF margin from quarterly statements.
+
+    Prefers the reported quarterly "Free Cash Flow"; otherwise reconstructs it as
+    Operating Cash Flow + Capex (capex is reported negative). Returns (fcf, revenue, margin).
+    """
+    fcf = _ttm_sum(q_cashflow, _FCF_LABELS)
+    if fcf is None:
+        ocf = _ttm_sum(q_cashflow, _OCF_LABELS)
+        capex = _ttm_sum(q_cashflow, _CAPEX_LABELS)  # negative outflow
+        if ocf is not None:
+            fcf = ocf + (capex if capex is not None else 0.0)
+    revenue = _ttm_sum(q_income, _REVENUE_LABELS)
+    margin = (fcf / revenue) if (fcf is not None and revenue) else None
+    return fcf, revenue, margin
+
+
 def _historical_fcff(ebit_row, da_row, capex_row, chg_wc_row, tax_rate) -> pd.Series:
     """FCFF per period = EBIT*(1-tax) + D&A - Capex - ChangeInWC, aligned on common dates."""
     if ebit_row is None:
@@ -280,8 +330,10 @@ def compute_default_assumptions(data: CompanyData) -> dict:
             cagr = (newest / oldest) ** (1 / years) - 1
             defaults["stage1_growth"] = round(float(np.clip(cagr, -0.05, 0.30)), 4)
 
-    # Average FCF margin from history.
-    if not data.hist_fcf_margin.empty:
+    # FCF margin: prefer TTM (last 4 quarters), then historical average, then latest annual.
+    if data.fcf_margin_ttm is not None and np.isfinite(data.fcf_margin_ttm):
+        defaults["fcf_margin"] = round(float(np.clip(data.fcf_margin_ttm, -0.10, 0.60)), 4)
+    elif not data.hist_fcf_margin.empty:
         m = float(data.hist_fcf_margin.mean())
         if np.isfinite(m):
             defaults["fcf_margin"] = round(float(np.clip(m, -0.10, 0.60)), 4)

@@ -62,20 +62,39 @@ class DCFResult:
     warnings: list[str]
 
 
-def compute_wacc(a: Assumptions) -> tuple[float, float, float]:
-    """Return (wacc, cost_of_equity, after_tax_cost_of_debt)."""
-    cost_of_equity = a.risk_free + a.beta * a.equity_risk_premium
-    after_tax_cost_of_debt = a.cost_of_debt * (1 - a.tax_rate)
-    if a.wacc_override is not None:
-        return a.wacc_override, cost_of_equity, after_tax_cost_of_debt
-    # Normalize weights defensively.
-    we, wd = a.equity_weight, a.debt_weight
+def estimate_wacc(
+    risk_free: float,
+    beta: float,
+    equity_risk_premium: float,
+    cost_of_debt: float,
+    tax_rate: float,
+    equity_weight: float,
+    debt_weight: float,
+) -> tuple[float, float, float]:
+    """CAPM-based WACC from raw components. Returns (wacc, cost_of_equity, after_tax_cost_of_debt)."""
+    cost_of_equity = risk_free + beta * equity_risk_premium
+    after_tax_cost_of_debt = cost_of_debt * (1 - tax_rate)
+    we, wd = equity_weight, debt_weight
     total = we + wd
     if total <= 0:
         we, wd = 1.0, 0.0
     else:
         we, wd = we / total, wd / total
     wacc = we * cost_of_equity + wd * after_tax_cost_of_debt
+    return wacc, cost_of_equity, after_tax_cost_of_debt
+
+
+def compute_wacc(a: Assumptions) -> tuple[float, float, float]:
+    """Return (wacc, cost_of_equity, after_tax_cost_of_debt) for the assumptions.
+
+    A manual ``wacc_override`` takes precedence over the CAPM blend.
+    """
+    wacc, cost_of_equity, after_tax_cost_of_debt = estimate_wacc(
+        a.risk_free, a.beta, a.equity_risk_premium, a.cost_of_debt,
+        a.tax_rate, a.equity_weight, a.debt_weight,
+    )
+    if a.wacc_override is not None:
+        wacc = a.wacc_override
     return wacc, cost_of_equity, after_tax_cost_of_debt
 
 

@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from dcf import sp500
 from dcf.data import CompanyData, compute_default_assumptions, fetch_company_data, get_risk_free_rate
 from dcf.formatting import fmt_big, fmt_currency, fmt_multiple, fmt_pct
-from dcf.model import Assumptions, run_dcf
+from dcf.model import Assumptions, estimate_wacc, run_dcf
 from dcf.quality import assess, severity_rank
 from dcf.reverse_dcf import solve_implied_growth
 
@@ -120,7 +120,14 @@ ebitda_margin = (data.ebitda / data.revenue) if (data.ebitda and data.revenue) e
 
 with st.sidebar:
     st.header("2 · Key Assumptions")
-    st.caption("Pre-filled from history — review and override the mandatory drivers.")
+    hcol1, hcol2 = st.columns([3, 2])
+    hcol1.caption("Pre-filled from data — override as needed.")
+    if hcol2.button("↩︎ Reset to defaults", help="Reset all Key Assumptions to the auto-derived values",
+                    use_container_width=True):
+        for k in list(st.session_state.keys()):
+            if str(k).startswith("inp_"):
+                del st.session_state[k]
+        st.rerun()
 
     projection_years = st.slider("Projection years", 3, 15, int(defaults["projection_years"]),
                                  key="inp_years")
@@ -134,30 +141,27 @@ with st.sidebar:
     tax_rate = st.number_input("Tax rate (%)", 0.0, 50.0,
                                float(defaults["tax_rate"] * 100), 0.5, key="inp_tax") / 100
 
-    with st.expander("3 · Discount rate (WACC)", expanded=False):
-        manual_wacc = st.checkbox("Enter WACC manually", value=False, key="inp_manwacc")
-        wacc_override = None
-        if manual_wacc:
-            wacc_override = st.number_input("WACC (%)", 1.0, 30.0, 9.0, 0.1, key="inp_wacc") / 100
-            risk_free = rf_default
-            beta = defaults["beta"]
-            erp = defaults["equity_risk_premium"]
-            cost_of_debt = cost_of_debt_default
-            equity_w = equity_w_default
-            debt_w = debt_w_default
-        else:
-            risk_free = st.number_input("Risk-free rate (%)", 0.0, 10.0,
-                                        round(rf_default * 100, 2), 0.1, key="inp_rf") / 100
-            beta = st.number_input("Beta", 0.0, 3.0, float(defaults["beta"]), 0.05, key="inp_beta")
-            erp = st.number_input("Equity risk premium (%)", 1.0, 12.0,
-                                  float(defaults["equity_risk_premium"] * 100), 0.25, key="inp_erp") / 100
-            cost_of_debt = st.number_input("Pre-tax cost of debt (%)", 0.0, 20.0,
-                                           round(cost_of_debt_default * 100, 2), 0.1, key="inp_cod") / 100
-            equity_w = st.slider("Equity weight (%)", 0, 100, int(round(equity_w_default * 100)),
-                                 key="inp_ew") / 100
-            debt_w = 1 - equity_w
+    # Discount rate: single field, pre-filled with an auto CAPM-based WACC, fully overridable.
+    risk_free = rf_default
+    beta = defaults["beta"]
+    erp = defaults["equity_risk_premium"]
+    cost_of_debt = cost_of_debt_default
+    equity_w = equity_w_default
+    debt_w = debt_w_default
+    auto_wacc, auto_coe, _ = estimate_wacc(risk_free, beta, erp, cost_of_debt,
+                                           defaults["tax_rate"], equity_w, debt_w)
+    st.markdown("**Discount rate (WACC)**")
+    wacc_pct = st.number_input(
+        "WACC (%)", 1.0, 30.0, round(auto_wacc * 100, 2), 0.1, key="inp_wacc",
+        help="Pre-filled with an automatic CAPM-based estimate. Type your own value to override it.",
+    )
+    wacc_override = wacc_pct / 100
+    st.caption(
+        f"Auto default ≈ {auto_wacc:.1%} (CAPM: risk-free {risk_free:.1%} + β {beta:.2f} × "
+        f"ERP {erp:.1%}, blended with after-tax cost of debt at market weights)."
+    )
 
-    with st.expander("4 · Terminal value", expanded=False):
+    with st.expander("3 · Terminal value", expanded=False):
         use_gordon = st.checkbox("Gordon Growth perpetuity", value=True, key="inp_gordon")
         use_exit = st.checkbox("Exit multiple (EV/EBITDA)", value=True, key="inp_exit")
         exit_multiple = st.number_input("Exit EV/EBITDA multiple", 2.0, 40.0,
@@ -208,6 +212,34 @@ meta = " · ".join(
     [x for x in [data.sector, data.industry, f"Data as of {data.as_of}"] if x]
 )
 st.markdown(f"<span class='small-note'>{meta}</span>", unsafe_allow_html=True)
+
+with st.expander("ℹ️ What each input field means"):
+    glossary = pd.DataFrame(
+        [
+            ("Projection years", "Length of the explicit forecast period (Stage 1) before a terminal "
+                                 "value is applied. Longer horizons rely more on uncertain assumptions."),
+            ("Stage-1 revenue growth", "Annual revenue growth rate for the first forecast year. "
+                                       "Auto-filled from the company's historical revenue CAGR."),
+            ("Fade growth toward terminal rate", "If on, growth declines linearly each year from the "
+                                                 "stage-1 rate to the terminal rate (more realistic for maturing firms)."),
+            ("Terminal growth", "Perpetual growth rate of cash flows after the forecast period. Should be "
+                                "modest — at or below long-run GDP/inflation (typically ~2–3%)."),
+            ("FCF margin (% of revenue)", "Free cash flow as a % of revenue. Auto-filled from the company's "
+                                          "trailing-twelve-month (TTM) FCF ÷ TTM revenue."),
+            ("Tax rate", "Effective corporate tax rate used to unlever EBIT into FCFF. Auto-derived from "
+                         "the latest income statement."),
+            ("WACC (discount rate)", "Weighted Average Cost of Capital — the rate used to discount future "
+                                     "cash flows to today. Pre-filled via CAPM; edit to override."),
+            ("Gordon Growth perpetuity", "Terminal value method: assumes FCFF grows forever at the terminal "
+                                         "rate. TV = FCFF₍ₙ₊₁₎ ÷ (WACC − terminal growth)."),
+            ("Exit multiple (EV/EBITDA)", "Terminal value method: applies an EV/EBITDA multiple to the final "
+                                          "year's EBITDA. The app averages the methods you enable."),
+            ("Exit EV/EBITDA multiple", "The multiple used by the exit-multiple method. Auto-filled from the "
+                                        "company's current implied EV/EBITDA."),
+        ],
+        columns=["Input field", "What it means"],
+    )
+    st.table(glossary.set_index("Input field"))
 
 result = st.session_state.get("result")
 
@@ -295,11 +327,28 @@ with tab_proj:
         )
         st.dataframe(disp, hide_index=True, use_container_width=True)
 
+        n_years = len(df)
+        # Primary projection chart: revenue (bars) + FCFF (line) over the forecast horizon.
+        fig_proj = go.Figure()
+        fig_proj.add_bar(x=df["Year"], y=df["Revenue"], name="Projected revenue",
+                         marker_color="#c6dbef")
+        fig_proj.add_scatter(x=df["Year"], y=df["FCFF"], name="Projected FCFF",
+                             mode="lines+markers", line=dict(color="#08519c", width=3), yaxis="y2")
+        fig_proj.update_layout(
+            title=f"{n_years}-Year projection — revenue & free cash flow",
+            xaxis=dict(title="Year", dtick=1),
+            yaxis=dict(title=f"Revenue ({ccy})"),
+            yaxis2=dict(title=f"FCFF ({ccy})", overlaying="y", side="right", showgrid=False),
+            height=400, legend=dict(orientation="h", y=1.12),
+        )
+        st.plotly_chart(fig_proj, use_container_width=True)
+
+        # Secondary chart: how much each year's FCFF is worth today.
         fig = go.Figure()
         fig.add_bar(x=df["Year"], y=df["FCFF"], name="FCFF")
         fig.add_bar(x=df["Year"], y=df["PV of FCFF"], name="PV of FCFF")
         fig.update_layout(barmode="group", title="Projected FCFF vs present value",
-                          xaxis_title="Year", yaxis_title=f"{ccy}", height=380,
+                          xaxis=dict(title="Year", dtick=1), yaxis_title=f"{ccy}", height=380,
                           legend=dict(orientation="h", y=1.1))
         st.plotly_chart(fig, use_container_width=True)
 
