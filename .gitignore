@@ -1,0 +1,19 @@
+# Secrets / config
+.env
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Caches
+.cache/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

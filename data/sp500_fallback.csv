@@ -1,0 +1,188 @@
+ticker,name,sector
+AAPL,Apple Inc.,Information Technology
+MSFT,Microsoft Corporation,Information Technology
+NVDA,NVIDIA Corporation,Information Technology
+AMZN,Amazon.com Inc.,Consumer Discretionary
+GOOGL,Alphabet Inc. (Class A),Communication Services
+GOOG,Alphabet Inc. (Class C),Communication Services
+META,Meta Platforms Inc.,Communication Services
+TSLA,Tesla Inc.,Consumer Discretionary
+BRK-B,Berkshire Hathaway Inc.,Financials
+AVGO,Broadcom Inc.,Information Technology
+JPM,JPMorgan Chase & Co.,Financials
+LLY,Eli Lilly and Company,Health Care
+V,Visa Inc.,Financials
+UNH,UnitedHealth Group Inc.,Health Care
+XOM,Exxon Mobil Corporation,Energy
+MA,Mastercard Incorporated,Financials
+COST,Costco Wholesale Corporation,Consumer Staples
+HD,The Home Depot Inc.,Consumer Discretionary
+PG,Procter & Gamble Company,Consumer Staples
+JNJ,Johnson & Johnson,Health Care
+NFLX,Netflix Inc.,Communication Services
+ABBV,AbbVie Inc.,Health Care
+BAC,Bank of America Corporation,Financials
+CRM,Salesforce Inc.,Information Technology
+ORCL,Oracle Corporation,Information Technology
+MRK,Merck & Co. Inc.,Health Care
+CVX,Chevron Corporation,Energy
+KO,The Coca-Cola Company,Consumer Staples
+WMT,Walmart Inc.,Consumer Staples
+PEP,PepsiCo Inc.,Consumer Staples
+AMD,Advanced Micro Devices Inc.,Information Technology
+ADBE,Adobe Inc.,Information Technology
+TMO,Thermo Fisher Scientific Inc.,Health Care
+LIN,Linde plc,Materials
+CSCO,Cisco Systems Inc.,Information Technology
+ACN,Accenture plc,Information Technology
+MCD,McDonald's Corporation,Consumer Discretionary
+ABT,Abbott Laboratories,Health Care
+WFC,Wells Fargo & Company,Financials
+GE,General Electric Company,Industrials
+DHR,Danaher Corporation,Health Care
+IBM,International Business Machines,Information Technology
+TXN,Texas Instruments Incorporated,Information Technology
+NOW,ServiceNow Inc.,Information Technology
+QCOM,QUALCOMM Incorporated,Information Technology
+PM,Philip Morris International,Consumer Staples
+INTU,Intuit Inc.,Information Technology
+CAT,Caterpillar Inc.,Industrials
+VZ,Verizon Communications Inc.,Communication Services
+AMGN,Amgen Inc.,Health Care
+ISRG,Intuitive Surgical Inc.,Health Care
+CMCSA,Comcast Corporation,Communication Services
+GS,The Goldman Sachs Group Inc.,Financials
+SPGI,S&P Global Inc.,Financials
+NKE,NIKE Inc.,Consumer Discretionary
+RTX,RTX Corporation,Industrials
+UBER,Uber Technologies Inc.,Industrials
+PFE,Pfizer Inc.,Health Care
+HON,Honeywell International Inc.,Industrials
+T,AT&T Inc.,Communication Services
+UNP,Union Pacific Corporation,Industrials
+LOW,Lowe's Companies Inc.,Consumer Discretionary
+ELV,Elevance Health Inc.,Health Care
+BKNG,Booking Holdings Inc.,Consumer Discretionary
+BA,The Boeing Company,Industrials
+SCHW,The Charles Schwab Corporation,Financials
+BLK,BlackRock Inc.,Financials
+SYK,Stryker Corporation,Health Care
+PLD,Prologis Inc.,Real Estate
+TJX,The TJX Companies Inc.,Consumer Discretionary
+DE,Deere & Company,Industrials
+ADP,Automatic Data Processing,Industrials
+MDT,Medtronic plc,Health Care
+GILD,Gilead Sciences Inc.,Health Care
+C,Citigroup Inc.,Financials
+LMT,Lockheed Martin Corporation,Industrials
+ADI,Analog Devices Inc.,Information Technology
+MMC,Marsh & McLennan Companies,Financials
+VRTX,Vertex Pharmaceuticals,Health Care
+CB,Chubb Limited,Financials
+AMAT,Applied Materials Inc.,Information Technology
+BX,Blackstone Inc.,Financials
+PANW,Palo Alto Networks Inc.,Information Technology
+REGN,Regeneron Pharmaceuticals,Health Care
+SBUX,Starbucks Corporation,Consumer Discretionary
+MO,Altria Group Inc.,Consumer Staples
+PGR,The Progressive Corporation,Financials
+FI,Fiserv Inc.,Financials
+ETN,Eaton Corporation plc,Industrials
+BSX,Boston Scientific Corporation,Health Care
+CI,The Cigna Group,Health Care
+SO,The Southern Company,Utilities
+DUK,Duke Energy Corporation,Utilities
+ZTS,Zoetis Inc.,Health Care
+KLAC,KLA Corporation,Information Technology
+APH,Amphenol Corporation,Information Technology
+MU,Micron Technology Inc.,Information Technology
+ICE,Intercontinental Exchange,Financials
+CME,CME Group Inc.,Financials
+EQIX,Equinix Inc.,Real Estate
+GD,General Dynamics Corporation,Industrials
+TGT,Target Corporation,Consumer Discretionary
+SNPS,Synopsys Inc.,Information Technology
+CDNS,Cadence Design Systems Inc.,Information Technology
+CL,Colgate-Palmolive Company,Consumer Staples
+ITW,Illinois Tool Works Inc.,Industrials
+WM,Waste Management Inc.,Industrials
+MCO,Moody's Corporation,Financials
+NOC,Northrop Grumman Corporation,Industrials
+FCX,Freeport-McMoRan Inc.,Materials
+PYPL,PayPal Holdings Inc.,Financials
+USB,U.S. Bancorp,Financials
+EOG,EOG Resources Inc.,Energy
+APD,Air Products and Chemicals,Materials
+EMR,Emerson Electric Co.,Industrials
+ORLY,O'Reilly Automotive Inc.,Consumer Discretionary
+CSX,CSX Corporation,Industrials
+MAR,Marriott International Inc.,Consumer Discretionary
+CARR,Carrier Global Corporation,Industrials
+PNC,The PNC Financial Services Group,Financials
+ROP,Roper Technologies Inc.,Information Technology
+SLB,Schlumberger Limited,Energy
+NEM,Newmont Corporation,Materials
+AON,Aon plc,Financials
+NSC,Norfolk Southern Corporation,Industrials
+FDX,FedEx Corporation,Industrials
+MMM,3M Company,Industrials
+GM,General Motors Company,Consumer Discretionary
+F,Ford Motor Company,Consumer Discretionary
+HCA,HCA Healthcare Inc.,Health Care
+MET,MetLife Inc.,Financials
+AEP,American Electric Power,Utilities
+DELL,Dell Technologies Inc.,Information Technology
+COF,Capital One Financial Corp.,Financials
+WELL,Welltower Inc.,Real Estate
+OXY,Occidental Petroleum Corp.,Energy
+PSX,Phillips 66,Energy
+TT,Trane Technologies plc,Industrials
+AIG,American International Group,Financials
+MPC,Marathon Petroleum Corp.,Energy
+GEV,GE Vernova Inc.,Industrials
+KMB,Kimberly-Clark Corporation,Consumer Staples
+DOW,Dow Inc.,Materials
+HUM,Humana Inc.,Health Care
+KHC,The Kraft Heinz Company,Consumer Staples
+PCAR,PACCAR Inc.,Industrials
+JCI,Johnson Controls International,Industrials
+EW,Edwards Lifesciences Corp.,Health Care
+MNST,Monster Beverage Corporation,Consumer Staples
+CMG,Chipotle Mexican Grill Inc.,Consumer Discretionary
+ROST,Ross Stores Inc.,Consumer Discretionary
+AZO,AutoZone Inc.,Consumer Discretionary
+PAYX,Paychex Inc.,Industrials
+FTNT,Fortinet Inc.,Information Technology
+ODFL,Old Dominion Freight Line,Industrials
+TRV,The Travelers Companies Inc.,Financials
+CTAS,Cintas Corporation,Industrials
+COP,ConocoPhillips,Energy
+D,Dominion Energy Inc.,Utilities
+EXC,Exelon Corporation,Utilities
+SRE,Sempra,Utilities
+KR,The Kroger Co.,Consumer Staples
+A,Agilent Technologies Inc.,Health Care
+IDXX,IDEXX Laboratories Inc.,Health Care
+GIS,General Mills Inc.,Consumer Staples
+VLO,Valero Energy Corporation,Energy
+WMB,The Williams Companies Inc.,Energy
+OKE,ONEOK Inc.,Energy
+KMI,Kinder Morgan Inc.,Energy
+PRU,Prudential Financial Inc.,Financials
+AFL,Aflac Incorporated,Financials
+ALL,The Allstate Corporation,Financials
+NXPI,NXP Semiconductors N.V.,Information Technology
+MCHP,Microchip Technology Inc.,Information Technology
+LRCX,Lam Research Corporation,Information Technology
+ADSK,Autodesk Inc.,Information Technology
+WDAY,Workday Inc.,Information Technology
+CRWD,CrowdStrike Holdings Inc.,Information Technology
+ABNB,Airbnb Inc.,Consumer Discretionary
+TFC,Truist Financial Corporation,Financials
+DG,Dollar General Corporation,Consumer Staples
+DLTR,Dollar Tree Inc.,Consumer Staples
+YUM,Yum! Brands Inc.,Consumer Discretionary
+HLT,Hilton Worldwide Holdings,Consumer Discretionary
+ECL,Ecolab Inc.,Materials
+NUE,Nucor Corporation,Materials
+SHW,The Sherwin-Williams Company,Materials
