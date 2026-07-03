@@ -1,15 +1,17 @@
-# 📈 S&P 500 DCF Valuation App
+# 📈 Equity Toolkit — DCF Valuation + LEAPS Screener
 
-A professional **Discounted Cash Flow (DCF)** tool to estimate the fair value of S&P 500
-companies. Financial data is pulled live from Yahoo Finance (via `yfinance`), you confirm a
-short list of mandatory drivers in a Streamlit UI, and the app produces a per-share fair value
-plus diagnostics that help you judge how much to trust the result.
+A professional two-tab Streamlit app:
+
+- **📈 DCF Valuation** — estimate a company's per-share fair value with an unlevered (FCFF)
+  discounted cash flow model, using live Yahoo Finance data and editable smart defaults.
+- **🎯 LEAPS Screener** — scan the US market for long-dated call (LEAPS) candidates: deeply
+  oversold names still in an uptrend, with cheap option premium.
 
 > ⚠️ Educational / research decision-support tool only. **Not investment advice.**
 
 ---
 
-## Features
+## DCF Valuation — features
 
 - **Unlevered FCFF DCF** — projects Free Cash Flow to the Firm, discounts at WACC, subtracts
   net debt to reach equity value and a per-share fair value.
@@ -27,18 +29,44 @@ plus diagnostics that help you judge how much to trust the result.
 
 ---
 
+## LEAPS Screener — features
+
+Scans the US market with a **cheapest-first funnel** so expensive options calls only run on the
+few survivors:
+
+1. **Universe** — US stocks above a market-cap / volume / price floor (default cap > $2B,
+   volume > 1M, price > $5), sourced from the NASDAQ screener API in one call.
+2. **Weekly RSI < 25** — deeply oversold on a slow timeframe (a pullback, not a chase).
+3. **Ripster EMA cloud bullish stack** (daily) — fast cloud (EMA 5/12) above med (34/50) above
+   slow (72/89), no overlap → the longer-term trend is still up.
+4. **ATM IV < 30%** — cheap option premium (fetched only for survivors).
+
+Each candidate gets an **IV-percentile proxy**, a **suggested LEAPS contract** (~12-month+ expiry,
+~0.80-delta deep-ITM call chosen via Black-Scholes delta), liquidity (spread & open interest),
+earnings proximity, and a composite **LEAPS Score (0–100)**. Includes a "how to pick a great
+LEAPS" guidance panel and CSV export.
+
+---
+
 ## Project structure
 
 ```
 DCF/
-  app.py                 # Streamlit entry point (sidebar inputs + output tabs)
+  app.py                 # thin entry: page config + two top-level tabs
   dcf/
+    dcf_tab.py           # render_dcf_tab() — the full DCF dashboard
+    leaps_tab.py         # render_leaps_tab() — the LEAPS screener UI
     data.py              # yfinance fetch + cleaning + smart-default assumptions
     model.py             # WACC, FCFF projection, terminal value, fair value
     reverse_dcf.py       # implied-growth solver (bisection)
     sp500.py             # S&P 500 constituent list (live + fallback)
     quality.py           # data-quality flags
     formatting.py        # currency / percent / big-number formatting
+  leaps/
+    universe.py          # US universe via NASDAQ screener API (+ cap/vol/price filters)
+    indicators.py        # weekly RSI + Ripster EMA clouds / bullish-stack detection
+    options_iv.py        # ATM IV, IV-percentile proxy, Black-Scholes LEAPS suggestion
+    screener.py          # staged scan funnel + LEAPS score
   data/sp500_fallback.csv
   requirements.txt
   .env                   # config (git-ignored)
@@ -91,6 +119,21 @@ the terminal rate).
 
 **Fair value** = `(PV of explicit FCFF + PV of terminal value − net debt) / shares outstanding`.
 
+### LEAPS screener methodology
+
+- **Weekly RSI** = 14-period RSI (Wilder smoothing) on weekly bars resampled from daily closes.
+- **Ripster clouds** = EMAs 5/12 (fast), 34/50 (med), 72/89 (slow). Bullish stack requires the
+  fast cloud entirely above the med cloud, and the med cloud entirely above the slow cloud.
+- **ATM IV** = average of the at-the-money call & put implied vol from the nearest expiry ≥ 30 DTE.
+- **Suggested LEAPS** = first expiry ≥ ~300 DTE, and the call whose **Black-Scholes delta** is
+  closest to the target (default 0.80). Greeks are computed locally (yfinance chains omit them).
+- **LEAPS Score (0–100)** = weighted blend of oversold-ness, EMA-stack separation, low ATM IV,
+  low IV-percentile proxy, option liquidity (spread & open interest), and distance from earnings.
+
+**Performance:** a full US-market scan is ~6–15 min on a cold run (bulk price download for the
+filtered ~1,500–2,500 names) and near-instant on cached re-runs (15-min TTL). Use the *Watchlist*
+or *S&P 500* scope, or a universe limit, to test quickly.
+
 ---
 
 ## Accuracy & limitations
@@ -102,3 +145,10 @@ the terminal rate).
 - Unlevered FCFF DCF is a **poor fit for banks, insurers, and REITs** (financing-driven cash
   flows). These are flagged, not blocked.
 - Always cross-check the model against the **reverse DCF** and the company's actual history.
+- **LEAPS "IV Rank/Percentile" is a proxy.** yfinance provides no historical implied volatility,
+  so the screener ranks current IV against the stock's trailing **1-year realized-volatility**
+  range — a stand-in for true IV Rank, clearly labeled as such.
+- **Weekly RSI < 25 combined with a bullish EMA stack is rare** — a full scan may return few or
+  zero names. Loosen the RSI threshold (e.g. 30–35) to widen results.
+- Options chains from yfinance can be thin or stale; always verify a contract in your broker
+  before trading.
