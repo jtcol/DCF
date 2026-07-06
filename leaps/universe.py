@@ -45,7 +45,11 @@ def _parse_money(text) -> float:
 def _fetch_nasdaq() -> pd.DataFrame:
     resp = requests.get(NASDAQ_URL, headers=_HEADERS, timeout=30)
     resp.raise_for_status()
-    rows = resp.json()["data"]["table"]["rows"]
+    data = resp.json().get("data") or {}
+    # The API has returned rows either directly under "data" or nested under "data.table".
+    rows = data.get("rows") or (data.get("table") or {}).get("rows")
+    if not rows:
+        raise ValueError("NASDAQ screener returned no rows")
     df = pd.DataFrame(rows)
     out = pd.DataFrame(
         {
@@ -90,9 +94,20 @@ def apply_filters(
     min_volume: float = 1e6,
     min_price: float = 5.0,
 ) -> pd.DataFrame:
-    """Stage-1 filter. Rows with cap/volume == 0 (unknown, e.g. offline fallback) are kept."""
+    """Stage-1 filter.
+
+    A column is only enforced when it actually carries data. If an entire column is 0
+    (e.g. the offline S&P 500 fallback, which has no cap/volume), that filter is skipped
+    rather than dropping everything. On the live NASDAQ path a 0 means "not reported"
+    (SPACs, brand-new listings) and correctly fails a cap/volume floor.
+    """
     m = df.copy()
-    cap_ok = (m["market_cap"] >= min_market_cap) | (m["market_cap"] <= 0)
-    vol_ok = (m["volume"] >= min_volume) | (m["volume"] <= 0)
-    price_ok = (m["price"] >= min_price) | (m["price"] <= 0)
-    return m[cap_ok & vol_ok & price_ok].reset_index(drop=True)
+
+    def _col_ok(col: str, minimum: float) -> pd.Series:
+        if (m[col] > 0).any():                 # real data present -> enforce the floor
+            return m[col] >= minimum
+        return pd.Series(True, index=m.index)  # column unknown everywhere -> don't filter
+
+    return m[_col_ok("market_cap", min_market_cap)
+             & _col_ok("volume", min_volume)
+             & _col_ok("price", min_price)].reset_index(drop=True)
