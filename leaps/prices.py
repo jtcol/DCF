@@ -19,11 +19,30 @@ def _chunks(seq, n):
         yield seq[i:i + n]
 
 
-def _extract_close(raw: pd.DataFrame, ticker: str, single: bool) -> Optional[pd.Series]:
+def _extract_close(raw: pd.DataFrame, ticker: str, single: bool = False) -> Optional[pd.Series]:
+    """Pull a ticker's Close series from a yf.download frame, robust to column layout.
+
+    yfinance may return: ticker-keyed MultiIndex (group_by='ticker', even for one ticker),
+    field-keyed MultiIndex (group_by='column'), or flat columns. Handle all three.
+    """
     try:
-        s = raw["Close"] if single else raw[ticker]["Close"]
+        cols = raw.columns
+        if isinstance(cols, pd.MultiIndex):
+            level0 = set(cols.get_level_values(0))
+            if ticker in level0:                       # ('NBIS', 'Close')
+                s = raw[ticker]["Close"]
+            elif "Close" in level0:                    # ('Close', 'NBIS')
+                sub = raw["Close"]
+                s = (sub[ticker] if isinstance(sub, pd.DataFrame) and ticker in sub.columns
+                     else sub.iloc[:, 0] if isinstance(sub, pd.DataFrame) else sub)
+            else:
+                return None
+        else:
+            s = raw["Close"]                           # flat columns
+        if isinstance(s, pd.DataFrame):
+            s = s.iloc[:, 0]
         return s.dropna() if s is not None else None
-    except (KeyError, TypeError):
+    except (KeyError, TypeError, IndexError):
         return None
 
 

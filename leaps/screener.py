@@ -18,6 +18,7 @@ import yfinance as yf
 
 from .indicators import ripster_cloud_state, weekly_rsi
 from .options_iv import atm_iv, realized_vol_percentile, suggest_leaps
+from .prices import _chunks, _extract_close
 
 Progress = Optional[Callable[[float, str], None]]
 
@@ -48,22 +49,6 @@ class ScanCounts:
     after_ema: int = 0
     after_iv: int = 0
     notes: list = field(default_factory=list)
-
-
-def _chunks(seq, n):
-    for i in range(0, len(seq), n):
-        yield seq[i:i + n]
-
-
-def _extract_close(raw: pd.DataFrame, ticker: str, single: bool) -> Optional[pd.Series]:
-    try:
-        if single:
-            s = raw["Close"]
-        else:
-            s = raw[ticker]["Close"]
-        return s.dropna() if s is not None else None
-    except (KeyError, TypeError):
-        return None
 
 
 def _next_earnings_days(tk: yf.Ticker) -> Optional[int]:
