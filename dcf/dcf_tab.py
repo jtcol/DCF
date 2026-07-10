@@ -99,7 +99,7 @@ def render_dcf_tab() -> None:
         hc1.markdown("#### 2 · Key assumptions")
         hc1.caption("Pre-filled from data — override as needed.")
         if hc2.button("↩︎ Reset", help="Reset all assumptions to the auto-derived values",
-                      use_container_width=True):
+                      width="stretch"):
             for k in list(st.session_state.keys()):
                 if str(k).startswith("inp_"):
                     del st.session_state[k]
@@ -149,7 +149,7 @@ def render_dcf_tab() -> None:
                else "EV/EBITDA unavailable — exit multiple defaulted to 12.0x.")
         )
 
-        generate = st.button("🚀 Generate Valuation", type="primary", use_container_width=True)
+        generate = st.button("🚀 Generate Valuation", type="primary", width="stretch")
 
     assumptions = Assumptions(
         base_revenue=data.revenue or 0.0,
@@ -309,7 +309,7 @@ def _render_projections(result, ccy) -> None:
             "PV of FCFF": df["PV of FCFF"].map(lambda v: fmt_big(v, ccy)),
         }
     )
-    st.dataframe(disp, hide_index=True, use_container_width=True)
+    st.dataframe(disp, hide_index=True, width="stretch")
 
     n_years = len(df)
     fig_proj = go.Figure()
@@ -322,7 +322,7 @@ def _render_projections(result, ccy) -> None:
         yaxis2=dict(title=f"FCFF ({ccy})", overlaying="y", side="right", showgrid=False),
         height=400, legend=dict(orientation="h", y=1.12),
     )
-    st.plotly_chart(fig_proj, use_container_width=True)
+    st.plotly_chart(fig_proj, width="stretch")
 
     fig = go.Figure()
     fig.add_bar(x=df["Year"], y=df["FCFF"], name="FCFF")
@@ -330,7 +330,7 @@ def _render_projections(result, ccy) -> None:
     fig.update_layout(barmode="group", title="Projected FCFF vs present value",
                       xaxis=dict(title="Year", dtick=1), yaxis_title=f"{ccy}", height=380,
                       legend=dict(orientation="h", y=1.1))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 
 def _render_reverse(result) -> None:
@@ -381,7 +381,7 @@ def _render_historical(data) -> None:
         fig1.add_bar(x=years, y=fcff.values, name="FCFF")
     fig1.update_layout(barmode="group", title="Revenue & free cash flow (historical)",
                        height=360, legend=dict(orientation="h", y=1.1))
-    st.plotly_chart(fig1, use_container_width=True)
+    st.plotly_chart(fig1, width="stretch")
 
     margin = data.hist_fcf_margin.dropna() if data.hist_fcf_margin is not None else pd.Series(dtype=float)
     if not margin.empty:
@@ -389,14 +389,14 @@ def _render_historical(data) -> None:
         fig2 = go.Figure()
         fig2.add_scatter(x=m_years, y=(margin.values * 100), mode="lines+markers", name="FCF margin %")
         fig2.update_layout(title="FCF margin (%) over time", height=320, yaxis_title="%")
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, width="stretch")
 
     st.markdown("#### Reported income statement (raw)")
     if not data.raw_income.empty:
-        st.dataframe(data.raw_income, use_container_width=True)
+        st.dataframe(data.raw_income, width="stretch")
     st.markdown("#### Reported cash flow statement (raw)")
     if not data.raw_cashflow.empty:
-        st.dataframe(data.raw_cashflow, use_container_width=True)
+        st.dataframe(data.raw_cashflow, width="stretch")
 
 
 def _render_quality(data, ebitda_margin, ccy) -> None:

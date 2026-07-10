@@ -101,7 +101,7 @@ def render_leaps_tab() -> None:
                        "download); it's near-instant when re-run within the cache window. Use a limit "
                        "or the Watchlist scope to test quickly.")
 
-        run = st.button("🔎 Run scan", type="primary", use_container_width=True, key="leaps_run_btn")
+        run = st.button("🔎 Run scan", type="primary", width="stretch", key="leaps_run_btn")
 
     if run:
         if scope == "Full US market":
@@ -161,7 +161,7 @@ def render_leaps_tab() -> None:
     disp["Mkt Cap"] = disp["Mkt Cap"].map(lambda v: fmt_big(v) if pd.notna(v) and v > 0 else "—")
     disp["Price"] = disp["Price"].map(lambda v: f"${v:,.2f}")
     disp["LEAPS strike"] = disp["LEAPS strike"].map(lambda v: f"${v:,.2f}" if pd.notna(v) else "—")
-    st.dataframe(disp, hide_index=True, use_container_width=True)
+    st.dataframe(disp, hide_index=True, width="stretch")
     st.caption(
         "LEAPS score (0–100) blends: how oversold (RSI), EMA-stack separation, low ATM IV, low IV "
         "percentile proxy, option liquidity (spread & open interest), and distance from earnings. "

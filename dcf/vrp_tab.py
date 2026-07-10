@@ -80,7 +80,7 @@ def render_vrp_tab() -> None:
                 "**Nasdaq-100 ≈ 1–3 min**, **S&P 500 ≈ 5–15 min** on a cold run "
                 "(faster within the cache window)."
             )
-        run = st.button("🔎 Run scan", type="primary", use_container_width=True, key="vrp_run_btn")
+        run = st.button("🔎 Run scan", type="primary", width="stretch", key="vrp_run_btn")
 
     if run:
         if scope == "Nasdaq-100":
@@ -130,7 +130,7 @@ def render_vrp_tab() -> None:
     st.dataframe(
         disp,
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
         column_config={
             "IV/RV": st.column_config.NumberColumn(format="%.2f"),
             "IV-rank proxy %": st.column_config.NumberColumn(format="%.0f"),
