@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 from dcf.dcf_tab import render_dcf_tab
 from dcf.leaps_tab import render_leaps_tab
+from dcf.vrp_tab import render_vrp_tab
 
 load_dotenv()
 
@@ -33,10 +34,15 @@ st.markdown(
 
 st.title("📈 Equity Toolkit")
 
-tab_dcf, tab_leaps = st.tabs(["📈 DCF Valuation", "🎯 LEAPS Screener"])
+tab_dcf, tab_leaps, tab_vrp = st.tabs(
+    ["📈 DCF Valuation", "🎯 LEAPS Screener", "🌊 Volatility Risk Premium"]
+)
 
 with tab_dcf:
     render_dcf_tab()
 
 with tab_leaps:
     render_leaps_tab()
+
+with tab_vrp:
+    render_vrp_tab()

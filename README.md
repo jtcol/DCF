@@ -1,11 +1,13 @@
 # 📈 Equity Toolkit — DCF Valuation + LEAPS Screener
 
-A professional two-tab Streamlit app:
+A professional three-tab Streamlit app:
 
 - **📈 DCF Valuation** — estimate a company's per-share fair value with an unlevered (FCFF)
   discounted cash flow model, using live Yahoo Finance data and editable smart defaults.
 - **🎯 LEAPS Screener** — scan the US market for long-dated call (LEAPS) candidates: deeply
   oversold names still in an uptrend, with cheap option premium.
+- **🌊 Volatility Risk Premium** — rank Nasdaq-100 / S&P 500 / watchlist tickers by how *rich*
+  their option premium is (30-day implied vol vs 30-day realized vol) — an option-seller's edge.
 
 > ⚠️ Educational / research decision-support tool only. **Not investment advice.**
 
@@ -48,26 +50,47 @@ LEAPS" guidance panel and CSV export.
 
 ---
 
+## Volatility Risk Premium — features
+
+Ranks tickers by option-premium richness across **Nasdaq-100**, **S&P 500**, or a manual
+**watchlist**. Per ticker it computes:
+
+1. **IV30** — at-the-money 30-day implied vol, variance-interpolated to exactly 30 DTE.
+2. **RV30** — annualized realized vol over the last ~21 trading days.
+3. **VRP = IV30 − RV30** and the **IV/RV ratio** (> 1 ⇒ "Good (rich)" — options priced richer
+   than the stock is actually moving; favorable for premium sellers).
+4. **IV-rank proxy** → *Rich* > 50 / *Cheap* < 30 (current IV vs the stock's 1-yr realized-vol
+   range).
+
+Results are **ranked best→worst by IV/RV**, with a guidance panel and CSV export.
+
+---
+
 ## Project structure
 
 ```
 DCF/
-  app.py                 # thin entry: page config + two top-level tabs
+  app.py                 # thin entry: page config + three top-level tabs
   dcf/
     dcf_tab.py           # render_dcf_tab() — the full DCF dashboard
     leaps_tab.py         # render_leaps_tab() — the LEAPS screener UI
+    vrp_tab.py           # render_vrp_tab() — the Volatility Risk Premium UI
     data.py              # yfinance fetch + cleaning + smart-default assumptions
     model.py             # WACC, FCFF projection, terminal value, fair value
     reverse_dcf.py       # implied-growth solver (bisection)
     sp500.py             # S&P 500 constituent list (live + fallback)
+    nasdaq100.py         # Nasdaq-100 constituent list (live + fallback)
     quality.py           # data-quality flags
     formatting.py        # currency / percent / big-number formatting
   leaps/
     universe.py          # US universe via NASDAQ screener API (+ cap/vol/price filters)
     indicators.py        # weekly RSI + Ripster EMA clouds / bullish-stack detection
     options_iv.py        # ATM IV, IV-percentile proxy, Black-Scholes LEAPS suggestion
-    screener.py          # staged scan funnel + LEAPS score
+    prices.py            # shared batched price-history download
+    screener.py          # staged LEAPS scan funnel + LEAPS score
+    vrp.py               # VRP engine: IV30, RV30, IV/RV ratio, ranking
   data/sp500_fallback.csv
+  data/nasdaq100_fallback.csv
   requirements.txt
   .env                   # config (git-ignored)
   .gitignore
@@ -133,6 +156,18 @@ the terminal rate).
 **Performance:** a full US-market scan is ~6–15 min on a cold run (bulk price download for the
 filtered ~1,500–2,500 names) and near-instant on cached re-runs (15-min TTL). Use the *Watchlist*
 or *S&P 500* scope, or a universe limit, to test quickly.
+
+### Volatility Risk Premium methodology
+
+- **RV30** = `std(daily log returns, last 21 trading days) × √252` (annualized).
+- **IV30** = ATM implied vol interpolated to 30 DTE — linear in *variance* between the two expiries
+  bracketing 30 days (ATM = average of the nearest call & put IV per expiry).
+- **VRP** = `IV30 − RV30`; **IV/RV** = `IV30 / RV30`. **Good (rich)** premium when IV/RV > 1.
+- **IV regime** from the IV-rank proxy: **Rich** > 50, **Cheap** < 30, else Neutral.
+- Tickers are sorted by **IV/RV descending**. Every ticker needs an options fetch, so runs are
+  threaded (~8 workers): Nasdaq-100 ≈ 1–3 min, S&P 500 ≈ 5–15 min, watchlist seconds.
+- Comparing *forward* IV to *trailing* RV is the standard practical VRP screen (true VRP compares
+  IV to subsequently-realized vol, which isn't knowable in advance).
 
 ---
 

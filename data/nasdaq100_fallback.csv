@@ -1,0 +1,100 @@
+ticker,name,sector
+AAPL,Apple Inc.,Information Technology
+ABNB,Airbnb Inc.,Consumer Discretionary
+ADBE,Adobe Inc.,Information Technology
+ADI,Analog Devices Inc.,Information Technology
+ADP,Automatic Data Processing,Industrials
+ADSK,Autodesk Inc.,Information Technology
+AEP,American Electric Power,Utilities
+AMAT,Applied Materials Inc.,Information Technology
+AMD,Advanced Micro Devices Inc.,Information Technology
+AMGN,Amgen Inc.,Health Care
+AMZN,Amazon.com Inc.,Consumer Discretionary
+ANSS,ANSYS Inc.,Information Technology
+APP,AppLovin Corporation,Information Technology
+ARM,Arm Holdings plc,Information Technology
+ASML,ASML Holding N.V.,Information Technology
+AVGO,Broadcom Inc.,Information Technology
+AZN,AstraZeneca plc,Health Care
+BIIB,Biogen Inc.,Health Care
+BKNG,Booking Holdings Inc.,Consumer Discretionary
+BKR,Baker Hughes Company,Energy
+CCEP,Coca-Cola Europacific Partners,Consumer Staples
+CDNS,Cadence Design Systems Inc.,Information Technology
+CDW,CDW Corporation,Information Technology
+CEG,Constellation Energy Corp.,Utilities
+CHTR,Charter Communications Inc.,Communication Services
+CMCSA,Comcast Corporation,Communication Services
+COST,Costco Wholesale Corporation,Consumer Staples
+CPRT,Copart Inc.,Industrials
+CRWD,CrowdStrike Holdings Inc.,Information Technology
+CSCO,Cisco Systems Inc.,Information Technology
+CSGP,CoStar Group Inc.,Real Estate
+CSX,CSX Corporation,Industrials
+CTAS,Cintas Corporation,Industrials
+CTSH,Cognizant Technology Solutions,Information Technology
+DASH,DoorDash Inc.,Consumer Discretionary
+DDOG,Datadog Inc.,Information Technology
+DLTR,Dollar Tree Inc.,Consumer Staples
+DXCM,DexCom Inc.,Health Care
+EA,Electronic Arts Inc.,Communication Services
+EXC,Exelon Corporation,Utilities
+FANG,Diamondback Energy Inc.,Energy
+FAST,Fastenal Company,Industrials
+FTNT,Fortinet Inc.,Information Technology
+GEHC,GE HealthCare Technologies,Health Care
+GFS,GlobalFoundries Inc.,Information Technology
+GILD,Gilead Sciences Inc.,Health Care
+GOOG,Alphabet Inc. (Class C),Communication Services
+GOOGL,Alphabet Inc. (Class A),Communication Services
+HON,Honeywell International Inc.,Industrials
+IDXX,IDEXX Laboratories Inc.,Health Care
+INTC,Intel Corporation,Information Technology
+INTU,Intuit Inc.,Information Technology
+ISRG,Intuitive Surgical Inc.,Health Care
+KDP,Keurig Dr Pepper Inc.,Consumer Staples
+KHC,The Kraft Heinz Company,Consumer Staples
+KLAC,KLA Corporation,Information Technology
+LIN,Linde plc,Materials
+LRCX,Lam Research Corporation,Information Technology
+LULU,Lululemon Athletica Inc.,Consumer Discretionary
+MAR,Marriott International Inc.,Consumer Discretionary
+MCHP,Microchip Technology Inc.,Information Technology
+MDLZ,Mondelez International Inc.,Consumer Staples
+MELI,MercadoLibre Inc.,Consumer Discretionary
+META,Meta Platforms Inc.,Communication Services
+MNST,Monster Beverage Corporation,Consumer Staples
+MRVL,Marvell Technology Inc.,Information Technology
+MSFT,Microsoft Corporation,Information Technology
+MU,Micron Technology Inc.,Information Technology
+NFLX,Netflix Inc.,Communication Services
+NVDA,NVIDIA Corporation,Information Technology
+NXPI,NXP Semiconductors N.V.,Information Technology
+ODFL,Old Dominion Freight Line,Industrials
+ON,ON Semiconductor Corporation,Information Technology
+ORLY,O'Reilly Automotive Inc.,Consumer Discretionary
+PANW,Palo Alto Networks Inc.,Information Technology
+PAYX,Paychex Inc.,Industrials
+PCAR,PACCAR Inc.,Industrials
+PDD,PDD Holdings Inc.,Consumer Discretionary
+PEP,PepsiCo Inc.,Consumer Staples
+PLTR,Palantir Technologies Inc.,Information Technology
+PYPL,PayPal Holdings Inc.,Financials
+QCOM,QUALCOMM Incorporated,Information Technology
+REGN,Regeneron Pharmaceuticals,Health Care
+ROP,Roper Technologies Inc.,Information Technology
+ROST,Ross Stores Inc.,Consumer Discretionary
+SBUX,Starbucks Corporation,Consumer Discretionary
+SNPS,Synopsys Inc.,Information Technology
+TEAM,Atlassian Corporation,Information Technology
+TMUS,T-Mobile US Inc.,Communication Services
+TSLA,Tesla Inc.,Consumer Discretionary
+TTD,The Trade Desk Inc.,Information Technology
+TTWO,Take-Two Interactive Software,Communication Services
+TXN,Texas Instruments Incorporated,Information Technology
+VRSK,Verisk Analytics Inc.,Industrials
+VRTX,Vertex Pharmaceuticals,Health Care
+WBD,Warner Bros. Discovery Inc.,Communication Services
+WDAY,Workday Inc.,Information Technology
+XEL,Xcel Energy Inc.,Utilities
+ZS,Zscaler Inc.,Information Technology
