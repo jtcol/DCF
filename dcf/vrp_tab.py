@@ -80,7 +80,7 @@ def render_vrp_tab() -> None:
                 "**Nasdaq-100 ≈ 1–3 min**, **S&P 500 ≈ 5–15 min** on a cold run "
                 "(faster within the cache window)."
             )
-        run = st.button("🔎 Run scan", type="primary", use_container_width=True)
+        run = st.button("🔎 Run scan", type="primary", use_container_width=True, key="vrp_run_btn")
 
     if run:
         if scope == "Nasdaq-100":
@@ -142,4 +142,4 @@ def render_vrp_tab() -> None:
         "**and** a Rich regime. IV-rank is a proxy (current IV vs the stock's 1-yr realized-vol range)."
     )
     st.download_button("⬇️ Download CSV", results.to_csv(index=False).encode("utf-8"),
-                       "vrp_ranking.csv", "text/csv")
+                       "vrp_ranking.csv", "text/csv", key="vrp_download")

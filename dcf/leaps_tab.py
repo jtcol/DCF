@@ -101,7 +101,7 @@ def render_leaps_tab() -> None:
                        "download); it's near-instant when re-run within the cache window. Use a limit "
                        "or the Watchlist scope to test quickly.")
 
-        run = st.button("🔎 Run scan", type="primary", use_container_width=True)
+        run = st.button("🔎 Run scan", type="primary", use_container_width=True, key="leaps_run_btn")
 
     if run:
         if scope == "Full US market":
@@ -169,4 +169,4 @@ def render_leaps_tab() -> None:
         "has no historical IV."
     )
     st.download_button("⬇️ Download CSV", results.to_csv(index=False).encode("utf-8"),
-                       "leaps_candidates.csv", "text/csv")
+                       "leaps_candidates.csv", "text/csv", key="leaps_download")
