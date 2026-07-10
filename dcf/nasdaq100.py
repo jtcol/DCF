@@ -6,12 +6,15 @@ CSV if the live fetch fails. Mirrors dcf/sp500.py.
 
 from __future__ import annotations
 
+import io
 import os
 from functools import lru_cache
 
 import pandas as pd
+import requests
 
 WIKIPEDIA_URL = "https://en.wikipedia.org/wiki/Nasdaq-100"
+_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 _FALLBACK_CSV = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "nasdaq100_fallback.csv")
 
 
@@ -20,7 +23,9 @@ def _normalize_ticker(ticker: str) -> str:
 
 
 def _load_from_wikipedia() -> pd.DataFrame:
-    tables = pd.read_html(WIKIPEDIA_URL)
+    resp = requests.get(WIKIPEDIA_URL, headers=_HEADERS, timeout=30)
+    resp.raise_for_status()
+    tables = pd.read_html(io.StringIO(resp.text))
     # Find the components table: it has a Ticker/Symbol column and a Company column.
     for tbl in tables:
         cols = {str(c).strip().lower(): c for c in tbl.columns}

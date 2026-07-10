@@ -7,12 +7,15 @@ fall back to a bundled static CSV so the app still works offline.
 
 from __future__ import annotations
 
+import io
 import os
 from functools import lru_cache
 
 import pandas as pd
+import requests
 
 WIKIPEDIA_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 _FALLBACK_CSV = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "sp500_fallback.csv")
 
 
@@ -22,8 +25,10 @@ def _normalize_ticker(ticker: str) -> str:
 
 
 def _load_from_wikipedia() -> pd.DataFrame:
-    # pandas.read_html needs lxml installed; returns a list of tables on the page.
-    tables = pd.read_html(WIKIPEDIA_URL)
+    # Fetch with a browser User-Agent — Wikipedia 403s pandas/urllib's default agent.
+    resp = requests.get(WIKIPEDIA_URL, headers=_HEADERS, timeout=30)
+    resp.raise_for_status()
+    tables = pd.read_html(io.StringIO(resp.text))
     df = tables[0]
     # Columns are typically: Symbol, Security, GICS Sector, GICS Sub-Industry, ...
     df = df.rename(columns={"Symbol": "ticker", "Security": "name", "GICS Sector": "sector"})
