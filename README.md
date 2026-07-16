@@ -28,6 +28,12 @@ A professional three-tab Streamlit app:
 - **Historical financials & charts** plus a **Data Quality** panel that flags missing fields,
   short history, negative/volatile FCF, and the financial-sector FCFF caveat.
 - **Ticker selection** via a searchable S&P 500 dropdown *and* a free-text box for any ticker.
+- **Quarterly-baseline dual DCF** (🧮 sub-tab) — a second, complementary method built from
+  *actually reported* quarterly cash flows: ingest up to 6 quarters → strip 2σ outliers (with a
+  visible cleaning audit) → average into a clean baseline (×4 to annualize) → project 5 years at
+  your growth rate → discount at WACC → fair value/share with Gordon terminal value **plus** an
+  explicit-years-only "floor". Runs twice — **Operating Cash Flow** and **Free Cash Flow** — and
+  shows both side by side (the OCF–FCF gap reflects capex intensity).
 
 ---
 

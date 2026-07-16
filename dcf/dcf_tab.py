@@ -15,6 +15,7 @@ from dcf.data import CompanyData, compute_default_assumptions, fetch_company_dat
 from dcf.formatting import fmt_big, fmt_currency, fmt_pct
 from dcf.model import Assumptions, run_dcf
 from dcf.quality import assess, severity_rank
+from dcf.quarterly_dcf import QuarterlyCF, fetch_quarterly_cf, run_dual
 from dcf.reverse_dcf import solve_implied_growth
 
 
@@ -31,6 +32,11 @@ def _load_company(ticker: str) -> CompanyData:
 @st.cache_data(show_spinner=False, ttl=6 * 3600)
 def _risk_free() -> float:
     return get_risk_free_rate()
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _load_quarterly_cf(ticker: str) -> QuarterlyCF:
+    return fetch_quarterly_cf(ticker)
 
 
 def _severity_icon(sev: str) -> str:
@@ -181,6 +187,13 @@ def render_dcf_tab() -> None:
             st.session_state["result"] = run_dcf(assumptions)
             st.session_state["reverse"] = solve_implied_growth(assumptions, data.current_price or 0.0)
             st.session_state["assumptions"] = assumptions
+            qcf = _load_quarterly_cf(ticker)
+            st.session_state["qdcf"] = run_dual(
+                qcf, growth=stage1_growth, wacc=wacc_override,
+                terminal_growth=terminal_growth, years=projection_years,
+                shares_outstanding=data.shares_outstanding or 0.0,
+            )
+            st.session_state["qdcf_source"] = qcf.fcf_source
 
     # -------------------------------------------------------------------------------
     # OUTPUT
@@ -220,14 +233,17 @@ def render_dcf_tab() -> None:
 
     result = st.session_state.get("result")
 
-    tab_val, tab_proj, tab_rev, tab_hist, tab_q = st.tabs(
-        ["💰 Valuation", "📊 Projections", "🔄 Reverse DCF", "📜 Historical & Charts", "✅ Data Quality"]
+    tab_val, tab_proj, tab_qdcf, tab_rev, tab_hist, tab_q = st.tabs(
+        ["💰 Valuation", "📊 Projections", "🧮 Quarterly DCF", "🔄 Reverse DCF",
+         "📜 Historical & Charts", "✅ Data Quality"]
     )
 
     with tab_val:
         _render_valuation(result, data, ccy)
     with tab_proj:
         _render_projections(result, ccy)
+    with tab_qdcf:
+        _render_quarterly(data, ccy)
     with tab_rev:
         _render_reverse(result)
     with tab_hist:
@@ -331,6 +347,90 @@ def _render_projections(result, ccy) -> None:
                       xaxis=dict(title="Year", dtick=1), yaxis_title=f"{ccy}", height=380,
                       legend=dict(orientation="h", y=1.1))
     st.plotly_chart(fig, width="stretch")
+
+
+def _render_quarterly(data, ccy) -> None:
+    st.markdown(
+        "**Quarterly-baseline DCF** — values the stock from its *actually reported* quarterly "
+        "cash flows: ingest up to 6 quarters → strip 2σ outliers → average into a clean "
+        "baseline (×4 to annualize) → project at your growth rate → discount at your WACC → "
+        "fair value/share. Run twice: **Operating Cash Flow** and **Free Cash Flow**."
+    )
+    qdcf = st.session_state.get("qdcf")
+    if qdcf is None:
+        st.info("Click **Generate Valuation** to run the quarterly-baseline DCF "
+                "(it uses the same growth, WACC and terminal-growth inputs above).")
+        return
+
+    fcf_source = st.session_state.get("qdcf_source", "")
+    if fcf_source == "ocf-capex":
+        st.caption("FCF derived as Operating Cash Flow − Capex (no reported quarterly FCF row).")
+
+    price = data.current_price
+    cols = st.columns(2)
+    for col, key, label in zip(cols, ("OCF", "FCF"),
+                               ("Operating Cash Flow", "Free Cash Flow")):
+        r = qdcf.get(key)
+        with col:
+            st.markdown(f"#### {label}")
+            if r is None:
+                st.warning(f"No quarterly {key} data available for this ticker.")
+                continue
+            fv = r.fair_value_with_tv
+            st.metric(f"Fair value / share ({key})", fmt_currency(fv, ccy))
+            if fv and price:
+                upside = fv / price - 1
+                st.metric("vs current price", fmt_pct(upside))
+            st.metric("Floor (explicit years only, no TV)",
+                      fmt_currency(r.fair_value_years_only, ccy))
+            st.caption(
+                f"Baseline: {fmt_big(r.baseline_quarterly, ccy)}/qtr → "
+                f"{fmt_big(r.baseline_annual, ccy)}/yr · "
+                f"{len(r.kept)} of {len(r.quarters)} quarters kept"
+            )
+            for w in r.warnings:
+                st.warning(w)
+
+    st.markdown("#### Data cleaning audit — reported quarters")
+    audit_rows = []
+    for key in ("OCF", "FCF"):
+        r = qdcf.get(key)
+        if r is None:
+            continue
+        dropped_idx = set(r.dropped.index)
+        for period, val in r.quarters.items():
+            audit_rows.append({
+                "Stream": key,
+                "Quarter": str(getattr(period, "date", lambda: period)()),
+                "Cash flow": fmt_big(float(val), ccy),
+                "Status": "❌ dropped (≥2σ outlier)" if period in dropped_idx else "✅ kept",
+            })
+    if audit_rows:
+        st.dataframe(pd.DataFrame(audit_rows), hide_index=True, width="stretch")
+
+    with st.expander("Year-by-year projections"):
+        for key in ("OCF", "FCF"):
+            r = qdcf.get(key)
+            if r is None:
+                continue
+            st.markdown(f"**{key}**")
+            disp = pd.DataFrame({
+                "Year": r.projection["Year"].astype(int),
+                "Cash flow": r.projection["Cash Flow"].map(lambda v: fmt_big(v, ccy)),
+                "Discount factor": r.projection["Discount Factor"].map(lambda v: f"{v:.3f}"),
+                "PV": r.projection["PV"].map(lambda v: fmt_big(v, ccy)),
+            })
+            st.dataframe(disp, hide_index=True, width="stretch")
+            st.caption(f"PV of years: {fmt_big(r.pv_years_total, ccy)} · "
+                       f"PV of terminal value: {fmt_big(r.pv_terminal_value, ccy)}")
+
+    st.caption(
+        "Notes: OCF ignores capex, so its value runs structurally higher than FCF — the gap "
+        "reflects capex intensity. Only ~5–6 quarters are available, so the 2σ screen is "
+        "indicative (with <4 quarters nothing is stripped). Discounting these levered cash "
+        "flows at WACC follows the specified method but mixes firm/equity conventions — treat "
+        "results as decision support, not investment advice."
+    )
 
 
 def _render_reverse(result) -> None:
