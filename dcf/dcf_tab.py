@@ -19,6 +19,46 @@ from dcf.quarterly_dcf import QuarterlyCF, fetch_quarterly_cf, run_dual
 from dcf.reverse_dcf import solve_implied_growth
 
 
+_GRID = "#e6e6e6"
+_AXIS_LINE = "#c9c9c9"
+
+
+def _padded_range(values, pad_frac: float = 0.18, zero_floor: bool = True):
+    """Y-axis range with headroom for outside labels — tight enough that bar/line
+    height differences read clearly, without truncating a bar chart's baseline."""
+    vals = [float(v) for v in values if v is not None and pd.notna(v)]
+    if not vals:
+        return None
+    lo, hi = min(vals), max(vals)
+    span = hi - lo
+    if span <= 0:
+        span = abs(hi) if hi else 1.0
+    pad = span * pad_frac
+    return [min(0.0, lo), hi + pad] if zero_floor else [lo - pad, hi + pad]
+
+
+def _label_mask(n: int, max_full: int = 8) -> set[int]:
+    """Which indices to direct-label: all of them if few, else just the endpoints."""
+    return set(range(n)) if n <= max_full else {0, n - 1}
+
+
+def _slim_layout(fig: go.Figure, height: int = 280, show_legend: bool = True) -> None:
+    """Shared slim styling: hairline recessive grid, tight margins, small legend."""
+    fig.update_layout(
+        height=height,
+        margin=dict(l=8, r=8, t=36, b=8),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        showlegend=show_legend,
+        legend=dict(orientation="h", y=1.18, x=0, font=dict(size=11)),
+        font=dict(size=12),
+        title=dict(font=dict(size=13)),
+    )
+    fig.update_xaxes(showgrid=False, linecolor=_AXIS_LINE, ticks="outside", tickcolor=_AXIS_LINE)
+    fig.update_yaxes(gridcolor=_GRID, gridwidth=1, zeroline=True, zerolinecolor=_AXIS_LINE,
+                     zerolinewidth=1, showline=False)
+
+
 @st.cache_data(show_spinner=False, ttl=24 * 3600)
 def _load_universe() -> pd.DataFrame:
     return sp500.load_sp500()
@@ -247,7 +287,7 @@ def render_dcf_tab() -> None:
     with tab_rev:
         _render_reverse(result)
     with tab_hist:
-        _render_historical(data)
+        _render_historical(data, ccy)
     with tab_q:
         _render_quality(data, ebitda_margin, ccy)
 
@@ -328,24 +368,52 @@ def _render_projections(result, ccy) -> None:
     st.dataframe(disp, hide_index=True, width="stretch")
 
     n_years = len(df)
-    fig_proj = go.Figure()
-    fig_proj.add_bar(x=df["Year"], y=df["Revenue"], name="Projected revenue", marker_color="#c6dbef")
-    fig_proj.add_scatter(x=df["Year"], y=df["FCFF"], name="Projected FCFF", mode="lines+markers",
-                         line=dict(color="#08519c", width=3), yaxis="y2")
-    fig_proj.update_layout(
-        title=f"{n_years}-Year projection — revenue & free cash flow",
-        xaxis=dict(title="Year", dtick=1), yaxis=dict(title=f"Revenue ({ccy})"),
-        yaxis2=dict(title=f"FCFF ({ccy})", overlaying="y", side="right", showgrid=False),
-        height=400, legend=dict(orientation="h", y=1.12),
-    )
-    st.plotly_chart(fig_proj, width="stretch")
+    years = df["Year"].astype(int).tolist()
+    revenue = df["Revenue"].tolist()
+    fcff = df["FCFF"].tolist()
+    pv_fcff = df["PV of FCFF"].tolist()
+    mask = _label_mask(n_years)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        fig_rev = go.Figure()
+        fig_rev.add_bar(
+            x=years, y=revenue, marker_color="#4c78a8",
+            text=[fmt_big(v, ccy) if i in mask else "" for i, v in enumerate(revenue)],
+            textposition="outside", cliponaxis=False,
+        )
+        fig_rev.update_layout(title=f"Projected revenue ({n_years}Y)", bargap=0.35)
+        fig_rev.update_xaxes(title="Year", dtick=1)
+        fig_rev.update_yaxes(title=f"Revenue ({ccy})", range=_padded_range(revenue))
+        _slim_layout(fig_rev, show_legend=False)
+        st.plotly_chart(fig_rev, width="stretch")
+
+    with c2:
+        fig_fcff = go.Figure()
+        fig_fcff.add_scatter(
+            x=years, y=fcff, mode="lines+markers+text",
+            line=dict(color="#e45756", width=2), marker=dict(size=8),
+            text=[fmt_big(v, ccy) if i in mask else "" for i, v in enumerate(fcff)],
+            textposition="top center",
+        )
+        fig_fcff.update_layout(title=f"Projected FCFF ({n_years}Y)")
+        fig_fcff.update_xaxes(title="Year", dtick=1)
+        fig_fcff.update_yaxes(title=f"FCFF ({ccy})", range=_padded_range(fcff, zero_floor=False))
+        _slim_layout(fig_fcff, show_legend=False)
+        st.plotly_chart(fig_fcff, width="stretch")
 
     fig = go.Figure()
-    fig.add_bar(x=df["Year"], y=df["FCFF"], name="FCFF")
-    fig.add_bar(x=df["Year"], y=df["PV of FCFF"], name="PV of FCFF")
-    fig.update_layout(barmode="group", title="Projected FCFF vs present value",
-                      xaxis=dict(title="Year", dtick=1), yaxis_title=f"{ccy}", height=380,
-                      legend=dict(orientation="h", y=1.1))
+    fig.add_bar(x=years, y=fcff, name="FCFF",
+               text=[fmt_big(v, ccy) if i in mask else "" for i, v in enumerate(fcff)],
+               textposition="outside", cliponaxis=False)
+    fig.add_bar(x=years, y=pv_fcff, name="PV of FCFF",
+               text=[fmt_big(v, ccy) if i in mask else "" for i, v in enumerate(pv_fcff)],
+               textposition="outside", cliponaxis=False)
+    fig.update_layout(title="Projected FCFF vs present value", barmode="group",
+                      bargap=0.3, bargroupgap=0.12)
+    fig.update_xaxes(title="Year", dtick=1)
+    fig.update_yaxes(title=ccy, range=_padded_range(fcff + pv_fcff))
+    _slim_layout(fig, height=300)
     st.plotly_chart(fig, width="stretch")
 
 
@@ -467,29 +535,54 @@ def _render_reverse(result) -> None:
         st.warning(reverse.message if reverse else "Reverse DCF unavailable.")
 
 
-def _render_historical(data) -> None:
+def _render_historical(data, ccy) -> None:
     rev = data.hist_revenue.dropna() if data.hist_revenue is not None else pd.Series(dtype=float)
     if rev.empty:
         st.info("No historical financial statements available for this ticker.")
         return
     years = [getattr(idx, "year", idx) for idx in rev.index]
     fcff = data.hist_fcff.reindex(rev.index) if data.hist_fcff is not None else pd.Series(dtype=float)
+    fcff_clean = fcff.dropna() if fcff is not None else pd.Series(dtype=float)
+    mask = _label_mask(len(years))
 
-    fig1 = go.Figure()
-    fig1.add_bar(x=years, y=rev.values, name="Revenue")
-    if fcff is not None and not fcff.dropna().empty:
-        fig1.add_bar(x=years, y=fcff.values, name="FCFF")
-    fig1.update_layout(barmode="group", title="Revenue & free cash flow (historical)",
-                       height=360, legend=dict(orientation="h", y=1.1))
-    st.plotly_chart(fig1, width="stretch")
+    c1, c2 = st.columns(2)
+    with c1:
+        fig1 = go.Figure()
+        fig1.add_bar(x=years, y=rev.values, name="Revenue",
+                    text=[fmt_big(v, ccy) if i in mask else "" for i, v in enumerate(rev.values)],
+                    textposition="outside", cliponaxis=False)
+        combined = list(rev.values)
+        if not fcff_clean.empty:
+            fig1.add_bar(x=years, y=fcff.values, name="FCFF",
+                        text=[fmt_big(v, ccy) if (i in mask and pd.notna(v)) else ""
+                              for i, v in enumerate(fcff.values)],
+                        textposition="outside", cliponaxis=False)
+            combined += list(fcff_clean.values)
+        fig1.update_layout(title="Revenue & FCFF (historical)", barmode="group",
+                          bargap=0.35, bargroupgap=0.12)
+        fig1.update_yaxes(range=_padded_range(combined))
+        _slim_layout(fig1, height=300)
+        st.plotly_chart(fig1, width="stretch")
 
-    margin = data.hist_fcf_margin.dropna() if data.hist_fcf_margin is not None else pd.Series(dtype=float)
-    if not margin.empty:
-        m_years = [getattr(idx, "year", idx) for idx in margin.index]
-        fig2 = go.Figure()
-        fig2.add_scatter(x=m_years, y=(margin.values * 100), mode="lines+markers", name="FCF margin %")
-        fig2.update_layout(title="FCF margin (%) over time", height=320, yaxis_title="%")
-        st.plotly_chart(fig2, width="stretch")
+    with c2:
+        margin = data.hist_fcf_margin.dropna() if data.hist_fcf_margin is not None else pd.Series(dtype=float)
+        if not margin.empty:
+            m_years = [getattr(idx, "year", idx) for idx in margin.index]
+            margin_pct = (margin.values * 100)
+            m_mask = _label_mask(len(m_years))
+            fig2 = go.Figure()
+            fig2.add_scatter(
+                x=m_years, y=margin_pct, mode="lines+markers+text",
+                line=dict(color="#54a24b", width=2), marker=dict(size=8),
+                text=[f"{v:.1f}%" if i in m_mask else "" for i, v in enumerate(margin_pct)],
+                textposition="top center",
+            )
+            fig2.update_layout(title="FCF margin (historical)")
+            fig2.update_yaxes(title="%", range=_padded_range(margin_pct, zero_floor=False))
+            _slim_layout(fig2, height=300, show_legend=False)
+            st.plotly_chart(fig2, width="stretch")
+        else:
+            st.info("No FCF margin history available.")
 
     st.markdown("#### Reported income statement (raw)")
     if not data.raw_income.empty:
