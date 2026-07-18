@@ -1,8 +1,9 @@
 """Golden Cross Scanner tab — weekly 50/200-EMA golden crosses across S&P 500 + Nasdaq-100.
 
 Exposes ``render_golden_cross_tab()``, called by app.py. Entry-signal mirror of the
-portfolio tab's death-cross exit flag: "fresh" crosses sit inside the 3% buffer above the
-200-week EMA; "recently crossed" happened within the last ~8 weeks but have run past it.
+portfolio tab's death-cross exit flag. This is an *event* scanner: only tickers whose
+bullish cross fired within the last week qualify — an older cross is a stale entry
+(a stalled trend, or one decaying back toward a death cross), not an opportunity.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from leaps.crosses import golden_cross_class, weekly_ema_cross
 from leaps.prices import batch_download_closes
 
 _BUFFER = 0.03
-_RECENT_WEEKS = 8
+_MAX_CROSS_AGE_WEEKS = 1  # only crosses on the latest/previous weekly bar are actionable
 _CARDS_PER_ROW = 3
 
 
@@ -28,10 +29,10 @@ def _universe() -> pd.DataFrame:
 
 
 def _card(col, row: dict, kind: str) -> None:
-    accent = "#0a7d32" if kind == "fresh" else "#8a6d00"
-    badge = "FRESH CROSS" if kind == "fresh" else "RECENTLY CROSSED"
+    accent = "#0a7d32" if kind == "fresh" else "#1a5fb4"
+    badge = "JUST CROSSED · ENTRY ZONE" if kind == "fresh" else "JUST CROSSED · STRONG"
     weeks = row["weeks_since_cross"]
-    weeks_txt = f"{weeks} wk ago" if weeks is not None else "—"
+    weeks_txt = "this week" if weeks == 0 else f"{weeks} wk ago" if weeks is not None else "—"
     col.markdown(
         f"""
 <div style="border:1px solid #e0e0e0; border-left:5px solid {accent}; border-radius:10px;
@@ -55,8 +56,10 @@ def render_golden_cross_tab() -> None:
     st.caption(
         "Scans **S&P 500 + Nasdaq-100** for weekly **golden crosses** (50-week EMA above the "
         "200-week EMA) — the entry-signal mirror of the portfolio death-cross flag. "
-        "**Fresh** = gap still inside the 3% buffer (early-entry zone) · **Recently crossed** = "
-        f"bullish cross within the last {_RECENT_WEEKS} weeks, gap already beyond 3%."
+        f"**Only crosses that fired within the last {_MAX_CROSS_AGE_WEEKS} week are shown** — an "
+        "older cross is a stale entry (a stalled trend, or one decaying back toward a death "
+        "cross). **✨ Entry zone** = gap still inside the 3% buffer · **🚀 Strong** = already "
+        "beyond 3% (explosive momentum)."
     )
 
     with st.container(border=True):
@@ -80,7 +83,7 @@ def render_golden_cross_tab() -> None:
             if state is None:
                 continue
             n_had_data += 1
-            kind = golden_cross_class(state, _BUFFER, _RECENT_WEEKS)
+            kind = golden_cross_class(state, _BUFFER, _MAX_CROSS_AGE_WEEKS)
             if kind:
                 rows.append({
                     "ticker": t, "name": names.get(t, t), "price": state.last_close,
@@ -98,38 +101,41 @@ def render_golden_cross_tab() -> None:
 
     if counts:
         fresh_n = int((results["class"] == "fresh").sum()) if results is not None and not results.empty else 0
-        recent_n = int((results["class"] == "recent").sum()) if results is not None and not results.empty else 0
+        strong_n = int((results["class"] == "strong").sum()) if results is not None and not results.empty else 0
         k1, k2, k3, k4, k5 = st.columns(5)
         k1.metric("Universe", counts["universe"])
         k2.metric("Had data", counts["downloaded"])
         k3.metric("≥ 4y history", counts["enough_history"])
-        k4.metric("✨ Fresh", fresh_n)
-        k5.metric("🌱 Recent", recent_n)
+        k4.metric("✨ Entry zone", fresh_n)
+        k5.metric("🚀 Strong", strong_n)
 
     if results is None:
         st.info("Click **Run scan** to find weekly golden-cross entries.")
         return
     if results.empty:
-        st.warning("No fresh or recently-crossed golden crosses right now — the entry zone is "
-                   "empty. Re-run after the weekly close, or when market breadth improves.")
+        st.warning(
+            "No golden crosses fired within the last week. **This is normal** — weekly 50/200 "
+            "crosses are rare events (often zero across the whole index in a given week). "
+            "Re-run after each Friday's weekly close to catch new ones."
+        )
         return
 
     fresh = results[results["class"] == "fresh"].sort_values("gap").reset_index(drop=True)
-    recent = results[results["class"] == "recent"].sort_values("weeks_since_cross").reset_index(drop=True)
+    strong = results[results["class"] == "strong"].sort_values("gap", ascending=False).reset_index(drop=True)
 
     if not fresh.empty:
-        st.markdown(f"#### ✨ Fresh crosses — in the 3% entry zone ({len(fresh)})")
+        st.markdown(f"#### ✨ Just crossed — in the 3% entry zone ({len(fresh)})")
         for i in range(0, len(fresh), _CARDS_PER_ROW):
             cols = st.columns(_CARDS_PER_ROW)
             for j, (_, row) in enumerate(fresh.iloc[i:i + _CARDS_PER_ROW].iterrows()):
                 _card(cols[j], row, "fresh")
 
-    if not recent.empty:
-        st.markdown(f"#### 🌱 Recently crossed — past the buffer ({len(recent)})")
-        for i in range(0, len(recent), _CARDS_PER_ROW):
+    if not strong.empty:
+        st.markdown(f"#### 🚀 Just crossed — already beyond 3% ({len(strong)})")
+        for i in range(0, len(strong), _CARDS_PER_ROW):
             cols = st.columns(_CARDS_PER_ROW)
-            for j, (_, row) in enumerate(recent.iloc[i:i + _CARDS_PER_ROW].iterrows()):
-                _card(cols[j], row, "recent")
+            for j, (_, row) in enumerate(strong.iloc[i:i + _CARDS_PER_ROW].iterrows()):
+                _card(cols[j], row, "strong")
 
     export = results.copy()
     export["gap %"] = (export.pop("gap") * 100).round(2)

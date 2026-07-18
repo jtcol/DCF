@@ -71,13 +71,19 @@ def death_cross_status(state: Optional[CrossState], buffer: float = 0.03) -> str
 def golden_cross_class(
     state: Optional[CrossState],
     buffer: float = 0.03,
-    recent_weeks: int = 8,
+    max_age_weeks: int = 1,
 ) -> Optional[str]:
-    """Entry classification: 'fresh' | 'recent' | None (no qualifying golden cross)."""
+    """Entry classification for a golden cross that JUST happened.
+
+    Only crosses at most ``max_age_weeks`` weekly bars old qualify — an old cross is a
+    stale entry (either a stalled trend or a decaying one converging back toward a
+    death cross), not an investment opportunity. Returns:
+    - 'fresh'  : just crossed, gap still inside the buffer (entry zone)
+    - 'strong' : just crossed and already beyond the buffer (explosive momentum)
+    - None     : no cross, cross too old, or insufficient history
+    """
     if state is None or state.gap < 0:
         return None
-    if state.gap < buffer:
-        return "fresh"
-    if state.weeks_since_cross is not None and state.weeks_since_cross <= recent_weeks:
-        return "recent"
-    return None
+    if state.weeks_since_cross is None or state.weeks_since_cross > max_age_weeks:
+        return None
+    return "fresh" if state.gap < buffer else "strong"

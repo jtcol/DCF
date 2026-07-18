@@ -12,7 +12,8 @@ A professional five-tab Streamlit app:
 - **🌊 Volatility Risk Premium** — rank Nasdaq-100 / S&P 500 / watchlist tickers by how *rich*
   their option premium is (30-day implied vol vs 30-day realized vol) — an option-seller's edge.
 - **✨ Golden Cross Scanner** — weekly 50/200-EMA **golden crosses** across S&P 500 + Nasdaq-100,
-  as cards: *fresh* (gap inside the 3% buffer — entry zone) and *recently crossed* (≤ 8 weeks).
+  as cards. Event scanner: only crosses fired **within the last week** qualify — *entry zone*
+  (gap < 3%) or *strong* (already beyond 3%).
 
 > ⚠️ Educational / research decision-support tool only. **Not investment advice.**
 
@@ -84,9 +85,11 @@ Both tabs share one engine (`leaps/crosses.py`): daily prices are downloaded as 
 
 - **Death cross (exit, Portfolio tab)** — 🟢 Green: 50-EMA at/above the 200-EMA ·
   🟠 Amber: crossed below but gap < 3% · 🔴 Red: gap ≥ 3% → exit signal.
-- **Golden cross (entry, Scanner tab)** — ✨ *Fresh*: 50-EMA above the 200-EMA with the gap
-  still inside the 3% buffer (early-entry zone) · 🌱 *Recently crossed*: bullish cross within
-  the last ~8 weeks, gap already beyond the buffer.
+- **Golden cross (entry, Scanner tab)** — an **event scanner**: a ticker qualifies only if the
+  bullish cross fired within the **last 1 week** (older crosses are stale — a stalled trend, or
+  one decaying back toward a death cross, is not an entry). Qualifying crosses are shown as
+  ✨ *entry zone* (gap still < 3%) or 🚀 *strong* (gap already ≥ 3% — explosive momentum).
+  An empty list most weeks is normal — weekly 50/200 crosses are rare events.
 - Tickers with under ~4 years of history (200-week EMA not meaningful) show "—" / are skipped.
 
 Portfolio DCF values reuse the FCFF engine with auto smart defaults and a **fixed 10% WACC**
