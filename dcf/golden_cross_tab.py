@@ -120,6 +120,15 @@ def render_golden_cross_tab() -> None:
         )
         return
 
+    # Belt-and-braces: re-enforce the cross-age criterion at display time, so results from
+    # an older code version (stale deploy or session) can never show stale crosses.
+    results = results[results["weeks_since_cross"].notna()
+                      & (results["weeks_since_cross"] <= _MAX_CROSS_AGE_WEEKS)]
+    if results.empty:
+        st.warning("No golden crosses fired within the last week (older results were filtered out "
+                   "— re-run the scan).")
+        return
+
     fresh = results[results["class"] == "fresh"].sort_values("gap").reset_index(drop=True)
     strong = results[results["class"] == "strong"].sort_values("gap", ascending=False).reset_index(drop=True)
 
