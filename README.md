@@ -1,13 +1,18 @@
-# 📈 Equity Toolkit — DCF Valuation + LEAPS Screener
+# 📈 Equity Toolkit — Portfolio, DCF, LEAPS, VRP & Golden Cross
 
-A professional three-tab Streamlit app:
+A professional five-tab Streamlit app:
 
+- **💼 Investment Portfolio** — your holdings (from `data/portfolio.csv`, editable in-app) with
+  a weekly 50/200-EMA **death-cross exit flag** (🟢/🟠/🔴, 3% buffer), 52-week range position,
+  and a **DCF fair value at a fixed 10% WACC** with upside % per holding.
 - **📈 DCF Valuation** — estimate a company's per-share fair value with an unlevered (FCFF)
   discounted cash flow model, using live Yahoo Finance data and editable smart defaults.
 - **🎯 LEAPS Screener** — scan the US market for long-dated call (LEAPS) candidates: deeply
   oversold names still in an uptrend, with cheap option premium.
 - **🌊 Volatility Risk Premium** — rank Nasdaq-100 / S&P 500 / watchlist tickers by how *rich*
   their option premium is (30-day implied vol vs 30-day realized vol) — an option-seller's edge.
+- **✨ Golden Cross Scanner** — weekly 50/200-EMA **golden crosses** across S&P 500 + Nasdaq-100,
+  as cards: *fresh* (gap inside the 3% buffer — entry zone) and *recently crossed* (≤ 8 weeks).
 
 > ⚠️ Educational / research decision-support tool only. **Not investment advice.**
 
@@ -72,15 +77,35 @@ Results are **ranked best→worst by IV/RV**, with a guidance panel and CSV expo
 
 ---
 
+## Portfolio & Golden Cross — weekly 50/200-EMA methodology
+
+Both tabs share one engine (`leaps/crosses.py`): daily prices are downloaded as **weekly bars
+(10 years ≈ 520)**, and the 50-week and 200-week EMAs are compared with a **3% buffer**:
+
+- **Death cross (exit, Portfolio tab)** — 🟢 Green: 50-EMA at/above the 200-EMA ·
+  🟠 Amber: crossed below but gap < 3% · 🔴 Red: gap ≥ 3% → exit signal.
+- **Golden cross (entry, Scanner tab)** — ✨ *Fresh*: 50-EMA above the 200-EMA with the gap
+  still inside the 3% buffer (early-entry zone) · 🌱 *Recently crossed*: bullish cross within
+  the last ~8 weeks, gap already beyond the buffer.
+- Tickers with under ~4 years of history (200-week EMA not meaningful) show "—" / are skipped.
+
+Portfolio DCF values reuse the FCFF engine with auto smart defaults and a **fixed 10% WACC**
+(`wacc_override=0.10`); verdict bands at ±10% upside. Holdings persist in `data/portfolio.csv` —
+edit in-app, then download & commit the CSV (or edit it on GitHub) to keep changes.
+
+---
+
 ## Project structure
 
 ```
 DCF/
-  app.py                 # thin entry: page config + three top-level tabs
+  app.py                 # thin entry: page config + five top-level tabs
   dcf/
+    portfolio_tab.py     # render_portfolio_tab() — holdings, death-cross flags, fixed-WACC DCF
     dcf_tab.py           # render_dcf_tab() — the full DCF dashboard
     leaps_tab.py         # render_leaps_tab() — the LEAPS screener UI
     vrp_tab.py           # render_vrp_tab() — the Volatility Risk Premium UI
+    golden_cross_tab.py  # render_golden_cross_tab() — weekly golden-cross entry cards
     data.py              # yfinance fetch + cleaning + smart-default assumptions
     model.py             # WACC, FCFF projection, terminal value, fair value
     reverse_dcf.py       # implied-growth solver (bisection)
@@ -92,11 +117,13 @@ DCF/
     universe.py          # US universe via NASDAQ screener API (+ cap/vol/price filters)
     indicators.py        # weekly RSI + Ripster EMA clouds / bullish-stack detection
     options_iv.py        # ATM IV, IV-percentile proxy, Black-Scholes LEAPS suggestion
-    prices.py            # shared batched price-history download
+    prices.py            # shared batched price-history download (daily or weekly bars)
+    crosses.py           # weekly 50/200-EMA cross engine (death & golden classifications)
     screener.py          # staged LEAPS scan funnel + LEAPS score
     vrp.py               # VRP engine: IV30, RV30, IV/RV ratio, ranking
   data/sp500_fallback.csv
   data/nasdaq100_fallback.csv
+  data/portfolio.csv     # your holdings (ticker,name) — source of truth for the Portfolio tab
   requirements.txt
   .env                   # config (git-ignored)
   .gitignore

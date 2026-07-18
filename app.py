@@ -9,7 +9,9 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from dcf.dcf_tab import render_dcf_tab
+from dcf.golden_cross_tab import render_golden_cross_tab
 from dcf.leaps_tab import render_leaps_tab
+from dcf.portfolio_tab import render_portfolio_tab
 from dcf.vrp_tab import render_vrp_tab
 
 load_dotenv()
@@ -34,9 +36,13 @@ st.markdown(
 
 st.title("📈 Equity Toolkit")
 
-tab_dcf, tab_leaps, tab_vrp = st.tabs(
-    ["📈 DCF Valuation", "🎯 LEAPS Screener", "🌊 Volatility Risk Premium"]
+tab_pf, tab_dcf, tab_leaps, tab_vrp, tab_gc = st.tabs(
+    ["💼 Investment Portfolio", "📈 DCF Valuation", "🎯 LEAPS Screener",
+     "🌊 Volatility Risk Premium", "✨ Golden Cross Scanner"]
 )
+
+with tab_pf:
+    render_portfolio_tab()
 
 with tab_dcf:
     render_dcf_tab()
@@ -46,3 +52,6 @@ with tab_leaps:
 
 with tab_vrp:
     render_vrp_tab()
+
+with tab_gc:
+    render_golden_cross_tab()

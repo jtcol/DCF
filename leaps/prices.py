@@ -53,8 +53,9 @@ def batch_download_closes(
     progress: Progress = None,
     progress_span: tuple[float, float] = (0.0, 1.0),
     min_bars: int = 30,
+    interval: str = "1d",
 ) -> dict[str, pd.Series]:
-    """Return {ticker: daily close Series} for tickers with at least ``min_bars`` bars."""
+    """Return {ticker: close Series} at ``interval`` for tickers with >= ``min_bars`` bars."""
     tickers = list(dict.fromkeys(tickers))
     out: dict[str, pd.Series] = {}
     chunks = list(_chunks(tickers, chunk_size))
@@ -65,7 +66,7 @@ def batch_download_closes(
             progress(frac, f"Downloading prices — batch {ci + 1}/{len(chunks)}")
         single = len(chunk) == 1
         try:
-            raw = yf.download(chunk, period=period, interval="1d", group_by="ticker",
+            raw = yf.download(chunk, period=period, interval=interval, group_by="ticker",
                               auto_adjust=True, threads=True, progress=False)
         except Exception:
             continue
