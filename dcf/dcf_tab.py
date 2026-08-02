@@ -108,12 +108,16 @@ def render_dcf_tab() -> None:
         ticker = free_text if free_text else sp500.parse_ticker_option(picked)
 
     # Reset cached inputs when the ticker changes so widgets re-init from fresh defaults.
+    # Mirror the Reset button exactly: delete the inp_* keys AND rerun, so the assumption
+    # widgets are recreated on a clean run and the browser shows the new ticker's values
+    # (deleting without a rerun updates state but can leave stale values on screen).
     if st.session_state.get("loaded_ticker") != ticker:
         for k in list(st.session_state.keys()):
             if str(k).startswith("inp_"):
                 del st.session_state[k]
         st.session_state["loaded_ticker"] = ticker
         st.session_state["result"] = None
+        st.rerun()
 
     # Fetch data (cached). A failure returns from the tab (not st.stop) so other tabs survive.
     try:
