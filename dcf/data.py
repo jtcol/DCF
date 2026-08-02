@@ -14,6 +14,7 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
+import requests
 import yfinance as yf
 
 # --- Candidate row labels (yfinance uses different names across companies/versions) -------
@@ -165,29 +166,107 @@ def _parse_growth_cell(g: pd.DataFrame, row_label: str) -> Optional[float]:
     return float(np.clip(val, -0.50, 2.00))
 
 
-def _fetch_analyst_growth(tk: "yf.Ticker") -> tuple[Optional[float], Optional[str]]:
+def _first_present(d: dict, keys: list[str]):
+    for k in keys:
+        if k in d and d[k] is not None:
+            return d[k]
+    return None
+
+
+def _fetch_finnhub_revenue_growth(ticker: str, latest_revenue: Optional[float]) -> tuple[Optional[float], Optional[str]]:
+    """Analyst consensus forward REVENUE growth from Finnhub's free-tier API (a legitimate,
+    ToS-compliant alternative to scraping — see README for why scraping candidates were
+    rejected). Chosen over an EPS-growth figure because the model's stage1_growth is a revenue
+    growth rate, so this is the more directly comparable reference.
+
+    Requires FINNHUB_API_KEY in the environment; returns (None, None) immediately if unset, and
+    on ANY error, unexpected response shape, or missing field — never raises. The exact response
+    schema has not been verified against a live authenticated call (Finnhub's docs are a
+    JS-rendered site this scraper can't read); field-name candidates are tried defensively and
+    this should be confirmed against a real API key before being relied on.
+    """
+    api_key = os.getenv("FINNHUB_API_KEY")
+    if not api_key or not latest_revenue or latest_revenue <= 0:
+        return None, None
+    try:
+        resp = requests.get(
+            "https://finnhub.io/api/v1/stock/revenue-estimate",
+            params={"symbol": ticker, "token": api_key},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return None, None
+        payload = resp.json()
+    except Exception:
+        return None, None
+
+    if not isinstance(payload, dict):
+        return None, None
+    rows = _first_present(payload, ["data", "estimate", "revenueEstimates"])
+    if not isinstance(rows, list) or not rows:
+        return None, None
+
+    today = datetime.utcnow().date()
+    forward = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        period_raw = _first_present(row, ["period", "date", "fiscalPeriod"])
+        rev = _first_present(row, ["revenueAvg", "revenue_avg", "avg", "estimate"])
+        if period_raw is None or rev is None:
+            continue
+        try:
+            period = datetime.strptime(str(period_raw)[:10], "%Y-%m-%d").date()
+            rev = float(rev)
+        except (TypeError, ValueError):
+            continue
+        if period > today and rev > 0:
+            forward.append((period, rev))
+    if not forward:
+        return None, None
+
+    forward.sort(key=lambda x: x[0])
+    nearest_period, nearest_rev = forward[0]
+    furthest_period, furthest_rev = forward[-1]
+    years_out = (furthest_period - today).days / 365.25
+
+    try:
+        if furthest_period != nearest_period and years_out >= 1.5:
+            cagr = (furthest_rev / latest_revenue) ** (1 / years_out) - 1
+            return float(np.clip(cagr, -0.50, 2.00)), f"{years_out:.0f}-year revenue consensus (Finnhub)"
+        growth = (nearest_rev / latest_revenue) - 1
+        return float(np.clip(growth, -0.50, 2.00)), "next fiscal year revenue consensus (Finnhub)"
+    except (ZeroDivisionError, ValueError):
+        return None, None
+
+
+def _fetch_analyst_growth(tk: "yf.Ticker", ticker: str, latest_revenue: Optional[float]) -> tuple[Optional[float], Optional[str]]:
     """Analyst consensus forward growth for the stock itself. Reference figure only — never
     used to set a default.
 
-    Prefers the long-term (~5y) estimate; Yahoo frequently leaves that field empty for
-    individual stocks, so falls back to the next-fiscal-year estimate when it's missing —
-    always paired with an accurate horizon label so a 1-year figure is never shown as 5-year.
-    Defensive end to end: any missing property, empty frame, or absent row/column returns
-    (None, None) rather than guessing.
+    Priority: yfinance's true long-term (~5y) figure first (free, already wired up, but Yahoo
+    frequently leaves it empty for individual stocks) -> Finnhub's revenue-growth estimate
+    (a genuine multi-year figure when Finnhub has multiple forward periods) -> yfinance's
+    next-fiscal-year figure as the last resort. Always paired with an accurate horizon label so
+    a 1-year figure is never shown as 5-year. Defensive end to end at every step.
     """
     try:
         g = tk.growth_estimates
     except Exception:
-        return None, None
-    if g is None or not isinstance(g, pd.DataFrame) or g.empty:
-        return None, None
+        g = None
+    if isinstance(g, pd.DataFrame) and not g.empty:
+        ltg = _parse_growth_cell(g, "LTG")
+        if ltg is not None:
+            return ltg, "long-term (5y) consensus"
 
-    ltg = _parse_growth_cell(g, "LTG")
-    if ltg is not None:
-        return ltg, "long-term (5y) consensus"
-    ny = _parse_growth_cell(g, "+1y")
-    if ny is not None:
-        return ny, "next fiscal year consensus"
+    finnhub_val, finnhub_label = _fetch_finnhub_revenue_growth(ticker, latest_revenue)
+    if finnhub_val is not None:
+        return finnhub_val, finnhub_label
+
+    if isinstance(g, pd.DataFrame) and not g.empty:
+        ny = _parse_growth_cell(g, "+1y")
+        if ny is not None:
+            return ny, "next fiscal year consensus"
     return None, None
 
 
@@ -320,7 +399,7 @@ def fetch_company_data(ticker: str) -> CompanyData:
         if np.isfinite(peak):
             data.fcf_margin_peak = peak
 
-    data.analyst_growth, data.analyst_growth_horizon = _fetch_analyst_growth(tk)
+    data.analyst_growth, data.analyst_growth_horizon = _fetch_analyst_growth(tk, ticker, data.revenue)
 
     # --- Record what is missing ------------------------------------------------------
     for fld, val in [

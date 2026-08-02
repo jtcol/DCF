@@ -188,9 +188,9 @@ def render_dcf_tab() -> None:
         c2.caption(
             "**Terminal margin default** = this company's own best historical FCF margin year "
             "(not an assumed figure) — edit freely.\n\n"
-            + (f"**Analyst {analyst_horizon} growth (reference only):** {analyst_g:.1%} — not "
-               "applied automatically; compare against Stage-1 growth above and override it "
-               "yourself if you want to use it."
+            + (f"**Analyst reference ({analyst_horizon}):** {analyst_g:.1%} — not applied "
+               "automatically; compare against Stage-1 growth above and override it yourself "
+               "if you want to use it."
                if analyst_g is not None
                else "**Analyst forward growth consensus:** not available for this ticker.")
         )
