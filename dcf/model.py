@@ -23,6 +23,7 @@ class Assumptions:
     fcf_margin: float
     tax_rate: float
     fade_growth: bool = True  # linearly fade growth from stage1 (yr1) to terminal (yrN)
+    fcf_margin_terminal: Optional[float] = None  # if set and != fcf_margin, fade margin too
 
     # WACC components (CAPM)
     risk_free: float = 0.042
@@ -107,6 +108,22 @@ def _growth_path(a: Assumptions) -> list[float]:
     return list(np.linspace(a.stage1_growth, a.terminal_growth, n))
 
 
+def _margin_path(a: Assumptions) -> list[float]:
+    """Per-year FCF margin for years 1..N.
+
+    Mirrors _growth_path: fades linearly from today's margin toward
+    ``fcf_margin_terminal`` when set and different from ``fcf_margin`` (e.g. a
+    capex-heavy company expected to become structurally more profitable as it
+    scales). No explicit toggle needed — equal values make this a flat no-op,
+    reproducing the original constant-margin behavior exactly.
+    """
+    n = a.projection_years
+    target = a.fcf_margin_terminal
+    if target is None or n <= 1 or target == a.fcf_margin:
+        return [a.fcf_margin] * n
+    return list(np.linspace(a.fcf_margin, target, n))
+
+
 def run_dcf(a: Assumptions) -> DCFResult:
     warnings: list[str] = []
     wacc, coe, atcod = compute_wacc(a)
@@ -118,17 +135,20 @@ def run_dcf(a: Assumptions) -> DCFResult:
         )
 
     growths = _growth_path(a)
+    margins = _margin_path(a)
     rows = []
     revenue = a.base_revenue
     for year in range(1, a.projection_years + 1):
         g = growths[year - 1]
+        m = margins[year - 1]
         revenue = revenue * (1 + g)
-        fcff = revenue * a.fcf_margin
+        fcff = revenue * m
         df = 1.0 / ((1 + wacc) ** year)
         rows.append(
             {
                 "Year": year,
                 "Growth": g,
+                "FCF Margin": m,
                 "Revenue": revenue,
                 "FCFF": fcff,
                 "Discount Factor": df,

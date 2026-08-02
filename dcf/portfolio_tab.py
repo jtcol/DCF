@@ -52,6 +52,7 @@ def _dcf_fair_value(ticker: str) -> Optional[float]:
         stage1_growth=float(d["stage1_growth"]),
         terminal_growth=float(d["terminal_growth"]),
         fcf_margin=float(d["fcf_margin"]),
+        fcf_margin_terminal=float(d["fcf_margin_terminal"]),
         tax_rate=float(d["tax_rate"]),
         fade_growth=True,
         beta=float(d["beta"]),

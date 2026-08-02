@@ -163,7 +163,21 @@ Streamlit Cloud auto-redeploys on every push to the connected branch.
 
 **FCFF per year** = `EBIT × (1 − tax) + D&A − Capex − ΔWorking Capital`. In projection, FCFF is
 modelled as `Revenue × FCF margin`, where revenue grows at the stage-1 rate (optionally fading to
-the terminal rate).
+the terminal rate) and **FCF margin can expand too** — see below.
+
+**Margin expansion (why some fair values used to look too low):** a plain DCF that holds FCF
+margin flat forever understates "invest-now, profit-later" companies — a business in a
+heavy-capex phase (e.g. building out capacity) gets today's suppressed margin projected
+unchanged for the whole horizon, even though it's expected to become structurally more
+profitable as it scales. The app now fades FCF margin from today's value toward a **terminal
+FCF margin**, mirroring how growth already fades to a terminal rate. The default terminal margin
+is the company's own **best historical FCF margin year** — grounded in what the business has
+actually achieved, not an invented bull case — and is fully editable; set it equal to the current
+FCF margin for the original flat-margin behavior. An **analyst forward growth consensus**
+estimate is shown as a reference figure next to Stage-1 growth (long-term/5y when Yahoo
+supplies it — often not, for individual stocks — falling back to next-fiscal-year, always
+labeled with the horizon actually shown) so you can see the market's forward view, but it is
+never applied automatically — you decide whether to adopt it.
 
 **WACC (CAPM):**
 - Cost of equity = `risk-free + β × equity risk premium`

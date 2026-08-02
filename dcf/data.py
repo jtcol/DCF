@@ -87,6 +87,12 @@ class CompanyData:
     revenue_ttm: Optional[float] = None
     fcf_margin_ttm: Optional[float] = None
 
+    # Best historical FCF margin year (a data-grounded anchor for margin expansion, not an
+    # invented bull case) and analyst forward growth consensus (reference only, not auto-applied)
+    fcf_margin_peak: Optional[float] = None
+    analyst_growth: Optional[float] = None
+    analyst_growth_horizon: Optional[str] = None  # e.g. "long-term (5y)" or "next fiscal year"
+
     # Historical series (index = period end date, most recent first)
     hist_revenue: pd.Series = field(default_factory=pd.Series)
     hist_ebit: pd.Series = field(default_factory=pd.Series)
@@ -139,6 +145,50 @@ def get_risk_free_rate() -> float:
     except Exception:
         pass
     return fallback
+
+
+def _parse_growth_cell(g: pd.DataFrame, row_label: str) -> Optional[float]:
+    if row_label not in g.index:
+        return None
+    row = g.loc[row_label]
+    col = "stockTrend" if "stockTrend" in row.index else ("stock" if "stock" in row.index else row.index[0])
+    try:
+        val = float(row[col])
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(val):
+        return None
+    # Some yfinance versions report this as a whole-number percent (e.g. 18.2) rather than
+    # a decimal (0.182); normalize by magnitude rather than assuming a fixed convention.
+    if abs(val) > 3.0:
+        val = val / 100.0
+    return float(np.clip(val, -0.50, 2.00))
+
+
+def _fetch_analyst_growth(tk: "yf.Ticker") -> tuple[Optional[float], Optional[str]]:
+    """Analyst consensus forward growth for the stock itself. Reference figure only — never
+    used to set a default.
+
+    Prefers the long-term (~5y) estimate; Yahoo frequently leaves that field empty for
+    individual stocks, so falls back to the next-fiscal-year estimate when it's missing —
+    always paired with an accurate horizon label so a 1-year figure is never shown as 5-year.
+    Defensive end to end: any missing property, empty frame, or absent row/column returns
+    (None, None) rather than guessing.
+    """
+    try:
+        g = tk.growth_estimates
+    except Exception:
+        return None, None
+    if g is None or not isinstance(g, pd.DataFrame) or g.empty:
+        return None, None
+
+    ltg = _parse_growth_cell(g, "LTG")
+    if ltg is not None:
+        return ltg, "long-term (5y) consensus"
+    ny = _parse_growth_cell(g, "+1y")
+    if ny is not None:
+        return ny, "next fiscal year consensus"
+    return None, None
 
 
 def fetch_company_data(ticker: str) -> CompanyData:
@@ -265,6 +315,12 @@ def fetch_company_data(ticker: str) -> CompanyData:
     if not data.hist_revenue.empty and not data.hist_fcff.empty:
         aligned = data.hist_fcff.reindex(data.hist_revenue.index)
         data.hist_fcf_margin = (aligned / data.hist_revenue).replace([np.inf, -np.inf], np.nan).dropna()
+    if len(data.hist_fcf_margin) >= 2:
+        peak = float(data.hist_fcf_margin.max())
+        if np.isfinite(peak):
+            data.fcf_margin_peak = peak
+
+    data.analyst_growth, data.analyst_growth_horizon = _fetch_analyst_growth(tk)
 
     # --- Record what is missing ------------------------------------------------------
     for fld, val in [
@@ -358,6 +414,21 @@ def compute_default_assumptions(data: CompanyData) -> dict:
             defaults["fcf_margin"] = round(float(np.clip(m, -0.10, 0.60)), 4)
     elif data.revenue and data.fcf_latest:
         defaults["fcf_margin"] = round(float(np.clip(data.fcf_latest / data.revenue, -0.10, 0.60)), 4)
+
+    # Terminal/target FCF margin: default to the company's own historical peak margin — a
+    # data-grounded anchor for margin expansion (e.g. a heavy-capex-now business that has
+    # already proven a higher margin in a leaner year), not an invented bull case. Only
+    # expands the default (never below the current-margin default); with no clear peak, the
+    # terminal margin simply equals the current one (fade is then a no-op).
+    defaults["fcf_margin_terminal"] = defaults["fcf_margin"]
+    if data.fcf_margin_peak is not None and np.isfinite(data.fcf_margin_peak):
+        peak_clipped = float(np.clip(data.fcf_margin_peak, -0.10, 0.60))
+        if peak_clipped > defaults["fcf_margin"]:
+            defaults["fcf_margin_terminal"] = round(peak_clipped, 4)
+
+    # Analyst forward growth consensus — reference only, shown in the UI but never auto-applied.
+    defaults["analyst_growth"] = data.analyst_growth
+    defaults["analyst_growth_horizon"] = data.analyst_growth_horizon
 
     # Exit multiple from current EV/EBITDA if we can estimate EV.
     if data.ebitda and data.ebitda > 0 and data.market_cap:

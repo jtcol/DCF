@@ -174,6 +174,27 @@ def render_dcf_tab() -> None:
                                    float(defaults["tax_rate"] * 100), 0.5, key=ik("tax")) / 100
         fade_growth = b3.checkbox("Fade growth to terminal rate", value=True, key=ik("fade"))
 
+        c1, c2 = st.columns(2)
+        fcf_margin_terminal = c1.number_input(
+            "Terminal/target FCF margin (%)", -10.0, 60.0,
+            float(defaults["fcf_margin_terminal"] * 100), 0.5, key=ik("fcfm_term"),
+            help="FCF margin fades linearly from today's margin to this target by the final "
+                 "projection year — captures a business expected to become structurally more "
+                 "profitable as it scales (e.g. heavy capex now, higher margins later). Set "
+                 "equal to the FCF margin above for no expansion (today's flat-margin behavior).",
+        ) / 100
+        analyst_g = defaults.get("analyst_growth")
+        analyst_horizon = defaults.get("analyst_growth_horizon") or "forward"
+        c2.caption(
+            "**Terminal margin default** = this company's own best historical FCF margin year "
+            "(not an assumed figure) — edit freely.\n\n"
+            + (f"**Analyst {analyst_horizon} growth (reference only):** {analyst_g:.1%} — not "
+               "applied automatically; compare against Stage-1 growth above and override it "
+               "yourself if you want to use it."
+               if analyst_g is not None
+               else "**Analyst forward growth consensus:** not available for this ticker.")
+        )
+
         # Discount rate: single overridable WACC field pre-filled by CAPM.
         risk_free = rf_default
         beta = defaults["beta"]
@@ -212,6 +233,7 @@ def render_dcf_tab() -> None:
         stage1_growth=stage1_growth,
         terminal_growth=terminal_growth,
         fcf_margin=fcf_margin,
+        fcf_margin_terminal=fcf_margin_terminal,
         tax_rate=tax_rate,
         fade_growth=fade_growth,
         risk_free=risk_free,
@@ -265,6 +287,10 @@ def render_dcf_tab() -> None:
                                     "modest — at or below long-run GDP/inflation (typically ~2–3%)."),
                 ("FCF margin (% of revenue)", "Free cash flow as a % of revenue. Auto-filled from the company's "
                                               "trailing-twelve-month (TTM) FCF ÷ TTM revenue."),
+                ("Terminal/target FCF margin", "The FCF margin the projection fades toward by the final year — "
+                                               "lets margin expand (or contract) over time instead of staying "
+                                               "flat. Auto-filled from the company's own best historical margin "
+                                               "year; set equal to FCF margin above for no expansion."),
                 ("Tax rate", "Effective corporate tax rate used to unlever EBIT into FCFF. Auto-derived from "
                              "the latest income statement."),
                 ("WACC (discount rate)", "Weighted Average Cost of Capital — the rate used to discount future "
@@ -368,6 +394,7 @@ def _render_projections(result, ccy) -> None:
         {
             "Year": df["Year"].astype(int),
             "Growth": df["Growth"].map(lambda v: fmt_pct(v)),
+            "FCF Margin": df["FCF Margin"].map(lambda v: fmt_pct(v)),
             "Revenue": df["Revenue"].map(lambda v: fmt_big(v, ccy)),
             "FCFF": df["FCFF"].map(lambda v: fmt_big(v, ccy)),
             "Discount factor": df["Discount Factor"].map(lambda v: f"{v:.3f}"),
