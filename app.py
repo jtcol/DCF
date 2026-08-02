@@ -34,7 +34,16 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("📈 Equity Toolkit")
+# Bump this whenever code changes ship — lets you confirm the deployed app is current.
+APP_BUILD = "build 2026-07-17b · ticker-reset + golden-cross-1wk"
+
+tcol, bcol = st.columns([3, 2])
+tcol.title("📈 Equity Toolkit")
+bcol.markdown(
+    f"<div style='text-align:right; color:#999; font-size:0.75rem; padding-top:1.6rem;'>"
+    f"{APP_BUILD}</div>",
+    unsafe_allow_html=True,
+)
 
 tab_pf, tab_dcf, tab_leaps, tab_vrp, tab_gc = st.tabs(
     ["💼 Investment Portfolio", "📈 DCF Valuation", "🎯 LEAPS Screener",
