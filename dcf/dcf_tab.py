@@ -107,17 +107,17 @@ def render_dcf_tab() -> None:
                                    key="dcf_free_ticker").strip().upper()
         ticker = free_text if free_text else sp500.parse_ticker_option(picked)
 
-    # Reset cached inputs when the ticker changes so widgets re-init from fresh defaults.
-    # Mirror the Reset button exactly: delete the inp_* keys AND rerun, so the assumption
-    # widgets are recreated on a clean run and the browser shows the new ticker's values
-    # (deleting without a rerun updates state but can leave stale values on screen).
+    # The assumption widgets below are keyed PER-TICKER (see `ik`), so when the ticker changes
+    # they become brand-new widgets and the browser renders them fresh with the new ticker's
+    # defaults — no reliance on deleting/re-defaulting a reused widget (which can update backend
+    # state while leaving the old number on screen). Here we only clear the prior valuation.
+    def ik(name: str) -> str:
+        return f"inp_{name}__{ticker}"
+
     if st.session_state.get("loaded_ticker") != ticker:
-        for k in list(st.session_state.keys()):
-            if str(k).startswith("inp_"):
-                del st.session_state[k]
         st.session_state["loaded_ticker"] = ticker
-        st.session_state["result"] = None
-        st.rerun()
+        for _k in ("result", "reverse", "assumptions"):
+            st.session_state.pop(_k, None)
 
     # Fetch data (cached). A failure returns from the tab (not st.stop) so other tabs survive.
     try:
@@ -156,23 +156,23 @@ def render_dcf_tab() -> None:
         if hc2.button("↩︎ Reset", help="Reset all assumptions to the auto-derived values",
                       width="stretch"):
             for k in list(st.session_state.keys()):
-                if str(k).startswith("inp_"):
+                if str(k).startswith("inp_") and str(k).endswith(f"__{ticker}"):
                     del st.session_state[k]
             st.rerun()
 
         a1, a2, a3 = st.columns(3)
         projection_years = a1.slider("Projection years", 3, 15, int(defaults["projection_years"]),
-                                     key="inp_years")
+                                     key=ik("years"))
         stage1_growth = a2.number_input("Stage-1 revenue growth (%)", -20.0, 60.0,
-                                        float(defaults["stage1_growth"] * 100), 0.5, key="inp_g1") / 100
+                                        float(defaults["stage1_growth"] * 100), 0.5, key=ik("g1")) / 100
         terminal_growth = a3.number_input("Terminal growth (%)", 0.0, 6.0,
-                                          float(defaults["terminal_growth"] * 100), 0.1, key="inp_tg") / 100
+                                          float(defaults["terminal_growth"] * 100), 0.1, key=ik("tg")) / 100
         b1, b2, b3 = st.columns(3)
         fcf_margin = b1.number_input("FCF margin (% of revenue)", -10.0, 60.0,
-                                     float(defaults["fcf_margin"] * 100), 0.5, key="inp_fcfm") / 100
+                                     float(defaults["fcf_margin"] * 100), 0.5, key=ik("fcfm")) / 100
         tax_rate = b2.number_input("Tax rate (%)", 0.0, 50.0,
-                                   float(defaults["tax_rate"] * 100), 0.5, key="inp_tax") / 100
-        fade_growth = b3.checkbox("Fade growth to terminal rate", value=True, key="inp_fade")
+                                   float(defaults["tax_rate"] * 100), 0.5, key=ik("tax")) / 100
+        fade_growth = b3.checkbox("Fade growth to terminal rate", value=True, key=ik("fade"))
 
         # Discount rate: single overridable WACC field pre-filled by CAPM.
         risk_free = rf_default
@@ -189,14 +189,14 @@ def render_dcf_tab() -> None:
 
         w1, w2, w3 = st.columns(3)
         wacc_pct = w1.number_input(
-            "Discount rate / WACC (%)", 1.0, 30.0, round(auto_wacc * 100, 2), 0.1, key="inp_wacc",
+            "Discount rate / WACC (%)", 1.0, 30.0, round(auto_wacc * 100, 2), 0.1, key=ik("wacc"),
             help="Pre-filled with an automatic CAPM-based estimate. Type your own value to override it.",
         )
         wacc_override = wacc_pct / 100
-        use_gordon = w2.checkbox("Gordon Growth TV", value=True, key="inp_gordon")
-        use_exit = w2.checkbox("Exit-multiple TV", value=True, key="inp_exit")
+        use_gordon = w2.checkbox("Gordon Growth TV", value=True, key=ik("gordon"))
+        use_exit = w2.checkbox("Exit-multiple TV", value=True, key=ik("exit"))
         exit_multiple = w3.number_input("Exit EV/EBITDA multiple", 2.0, 40.0,
-                                        float(defaults["exit_multiple"]), 0.5, key="inp_mult")
+                                        float(defaults["exit_multiple"]), 0.5, key=ik("mult"))
         st.caption(
             f"Auto WACC ≈ {auto_wacc:.1%} (CAPM: rf {risk_free:.1%} + β {beta:.2f} × ERP {erp:.1%}). "
             + (f"Exit multiple auto {defaults['exit_multiple']:.1f}x from current EV/EBITDA."
