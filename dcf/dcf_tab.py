@@ -93,13 +93,18 @@ def render_dcf_tab() -> None:
     # -------------------------------------------------------------------------------
     # INPUTS (kept inside the tab)
     # -------------------------------------------------------------------------------
+    def _clear_free_ticker():
+        st.session_state["dcf_free_ticker"] = ""
+
     with st.container(border=True):
         st.markdown("#### 1 · Select company")
         sc1, sc2 = st.columns(2)
         options = sp500.ticker_options(universe)
         default_idx = next((i for i, o in enumerate(options) if o.startswith("AAPL ")), 0)
-        picked = sc1.selectbox("S&P 500 constituent", options, index=default_idx)
-        free_text = sc2.text_input("…or enter any ticker", value="").strip().upper()
+        picked = sc1.selectbox("S&P 500 constituent", options, index=default_idx,
+                               key="dcf_ticker_select", on_change=_clear_free_ticker)
+        free_text = sc2.text_input("…or enter any ticker", value="",
+                                   key="dcf_free_ticker").strip().upper()
         ticker = free_text if free_text else sp500.parse_ticker_option(picked)
 
     # Reset cached inputs when the ticker changes so widgets re-init from fresh defaults.
