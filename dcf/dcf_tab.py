@@ -6,6 +6,7 @@ sidebar) so they don't bleed across the app's other top-level tabs.
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -17,10 +18,23 @@ from dcf.model import Assumptions, run_dcf
 from dcf.quality import assess, severity_rank
 from dcf.quarterly_dcf import QuarterlyCF, fetch_quarterly_cf, run_dual
 from dcf.reverse_dcf import solve_implied_growth
+from dcf.scenarios import DEFAULT_WEIGHTS, ScenarioAnchors, build_scenarios, weighted_value
 
 
 _GRID = "#e6e6e6"
 _AXIS_LINE = "#c9c9c9"
+
+# Practitioner-standard beta clamp for the auto-CAPM WACC calc — an unclamped high beta (e.g.
+# TSLA's ~1.8) can push WACC high enough to crush fair value on its own, before any cash-flow
+# assumption is even considered. This does NOT touch a manual WACC override.
+BETA_CLAMP_MIN, BETA_CLAMP_MAX = 0.8, 1.6
+WACC_FLOOR, WACC_CAP = 0.065, 0.14
+# Base-case upside/downside beyond which we show a diagnostic (market-implied growth vs yours)
+# instead of silently accepting an extreme-looking result.
+DIAGNOSTIC_DEVIATION_THRESHOLD = 0.75
+
+SCENARIO_LABELS = {"bear": "🐻 Bear", "base": "⚖️ Base", "bull": "🐂 Bull"}
+SCENARIO_COLORS = {"bear": "#d1495b", "base": "#4c78a8", "bull": "#2a9d8f"}
 
 
 def _padded_range(values, pad_frac: float = 0.18, zero_floor: bool = True):
@@ -116,7 +130,8 @@ def render_dcf_tab() -> None:
 
     if st.session_state.get("loaded_ticker") != ticker:
         st.session_state["loaded_ticker"] = ticker
-        for _k in ("result", "reverse", "assumptions"):
+        for _k in ("result", "reverse", "assumptions", "scenario_results", "scenario_assumptions",
+                   "qdcf", "qdcf_source"):
             st.session_state.pop(_k, None)
 
     # Fetch data (cached). A failure returns from the tab (not st.stop) so other tabs survive.
@@ -195,31 +210,40 @@ def render_dcf_tab() -> None:
                else "**Analyst forward growth consensus:** not available for this ticker.")
         )
 
-        # Discount rate: single overridable WACC field pre-filled by CAPM.
+        # Discount rate: single overridable WACC field pre-filled by CAPM. Beta is clamped for
+        # the AUTO calc only (a practitioner-standard adjustment) — raw beta is still shown, and
+        # a manual WACC entry always wins regardless of this clamp.
         risk_free = rf_default
         beta = defaults["beta"]
+        beta_for_wacc = float(np.clip(beta, BETA_CLAMP_MIN, BETA_CLAMP_MAX))
         erp = defaults["equity_risk_premium"]
         cost_of_debt = cost_of_debt_default
         equity_w = equity_w_default
         debt_w = debt_w_default
-        auto_coe = risk_free + beta * erp
+        auto_coe = risk_free + beta_for_wacc * erp
         auto_atcod = cost_of_debt * (1 - defaults["tax_rate"])
         _tw = equity_w + debt_w
         _ew, _dw = (equity_w / _tw, debt_w / _tw) if _tw > 0 else (1.0, 0.0)
-        auto_wacc = _ew * auto_coe + _dw * auto_atcod
+        auto_wacc = float(np.clip(_ew * auto_coe + _dw * auto_atcod, WACC_FLOOR, WACC_CAP))
 
         w1, w2, w3 = st.columns(3)
         wacc_pct = w1.number_input(
             "Discount rate / WACC (%)", 1.0, 30.0, round(auto_wacc * 100, 2), 0.1, key=ik("wacc"),
-            help="Pre-filled with an automatic CAPM-based estimate. Type your own value to override it.",
+            help="Pre-filled with an automatic CAPM-based estimate (beta clamped to "
+                 f"[{BETA_CLAMP_MIN:.1f}, {BETA_CLAMP_MAX:.1f}]). Type your own value to override it. "
+                 "The SAME WACC is used for all three Bear/Base/Bull scenarios below — scenarios "
+                 "flex cash-flow assumptions, not risk.",
         )
         wacc_override = wacc_pct / 100
         use_gordon = w2.checkbox("Gordon Growth TV", value=True, key=ik("gordon"))
         use_exit = w2.checkbox("Exit-multiple TV", value=True, key=ik("exit"))
         exit_multiple = w3.number_input("Exit EV/EBITDA multiple", 2.0, 40.0,
                                         float(defaults["exit_multiple"]), 0.5, key=ik("mult"))
+        beta_note = (f" (raw β {beta:.2f} clamped to {beta_for_wacc:.2f} for this calc)"
+                     if abs(beta - beta_for_wacc) > 1e-9 else "")
         st.caption(
-            f"Auto WACC ≈ {auto_wacc:.1%} (CAPM: rf {risk_free:.1%} + β {beta:.2f} × ERP {erp:.1%}). "
+            f"Auto WACC ≈ {auto_wacc:.1%} (CAPM: rf {risk_free:.1%} + β {beta_for_wacc:.2f} × "
+            f"ERP {erp:.1%}){beta_note}. "
             + (f"Exit multiple auto {defaults['exit_multiple']:.1f}x from current EV/EBITDA."
                if (data.ebitda and data.market_cap)
                else "EV/EBITDA unavailable — exit multiple defaulted to 12.0x.")
@@ -255,7 +279,22 @@ def render_dcf_tab() -> None:
         if not data.revenue:
             st.error("Cannot run a valuation without revenue data.")
         else:
-            st.session_state["result"] = run_dcf(assumptions)
+            anchors = ScenarioAnchors(
+                analyst_growth_avg=defaults.get("analyst_growth"),
+                analyst_growth_low=defaults.get("analyst_growth_low"),
+                analyst_growth_high=defaults.get("analyst_growth_high"),
+                hist_fcf_margin_mean=(float(data.hist_fcf_margin.mean())
+                                      if data.hist_fcf_margin is not None and not data.hist_fcf_margin.empty
+                                      else None),
+                hist_fcf_margin_peak=data.fcf_margin_peak,
+                fcf_margin_ttm=data.fcf_margin_ttm,
+            )
+            scenario_assumptions = build_scenarios(assumptions, anchors)
+            scenario_results = {name: run_dcf(a) for name, a in scenario_assumptions.items()}
+
+            st.session_state["scenario_assumptions"] = scenario_assumptions
+            st.session_state["scenario_results"] = scenario_results
+            st.session_state["result"] = scenario_results["base"]  # base case powers other sub-tabs
             st.session_state["reverse"] = solve_implied_growth(assumptions, data.current_price or 0.0)
             st.session_state["assumptions"] = assumptions
             qcf = _load_quarterly_cf(ticker)
@@ -307,6 +346,7 @@ def render_dcf_tab() -> None:
         st.table(glossary.set_index("Input field"))
 
     result = st.session_state.get("result")
+    scenario_results = st.session_state.get("scenario_results")
 
     tab_val, tab_proj, tab_qdcf, tab_rev, tab_hist, tab_q = st.tabs(
         ["💰 Valuation", "📊 Projections", "🧮 Quarterly DCF", "🔄 Reverse DCF",
@@ -314,9 +354,9 @@ def render_dcf_tab() -> None:
     )
 
     with tab_val:
-        _render_valuation(result, data, ccy)
+        _render_valuation(scenario_results, data, ccy)
     with tab_proj:
-        _render_projections(result, ccy)
+        _render_projections(scenario_results, ccy)
     with tab_qdcf:
         _render_quarterly(data, ccy)
     with tab_rev:
@@ -333,62 +373,166 @@ def render_dcf_tab() -> None:
     )
 
 
-def _render_valuation(result, data, ccy) -> None:
-    if result is None:
+def _scenario_driver_summary(a: Assumptions) -> str:
+    growth_txt = (f"{a.stage1_growth:.1%}→{a.terminal_growth:.1%}"
+                 + (f" (held {a.hold_years}y)" if a.hold_years else ""))
+    margin_txt = (f"{a.fcf_margin:.1%}→{a.fcf_margin_terminal:.1%}"
+                 if a.fcf_margin_terminal is not None and abs(a.fcf_margin_terminal - a.fcf_margin) > 1e-6
+                 else f"{a.fcf_margin:.1%} flat")
+    return f"Growth {growth_txt} · Margin {margin_txt} · Exit {a.exit_multiple:.1f}x"
+
+
+def _render_valuation(scenario_results, data, ccy) -> None:
+    if not scenario_results:
         st.info("Set your assumptions above and click **Generate Valuation**.")
         return
-    fv = result.fair_value_per_share
-    price = data.current_price
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Fair value / share", fmt_currency(fv, ccy))
-    c2.metric("Current price", fmt_currency(price, ccy))
-    if fv and price:
-        upside = fv / price - 1
-        verdict = "Undervalued" if upside > 0.10 else "Overvalued" if upside < -0.10 else "Fairly valued"
-        cls = ("verdict-under" if upside > 0.10 else
-               "verdict-over" if upside < -0.10 else "verdict-fair")
-        c3.metric("Upside / downside", fmt_pct(upside))
-        c4.markdown(f"**Verdict**<br><span class='{cls}'>{verdict}</span>", unsafe_allow_html=True)
 
-    for w in result.warnings:
+    base_result = scenario_results["base"]
+    scenario_assumptions = st.session_state.get("scenario_assumptions") or {}
+    price = data.current_price
+    fair_values = {k: r.fair_value_per_share for k, r in scenario_results.items()}
+
+    st.markdown("#### Scenario weights (blend only — each scenario's own value is unaffected)")
+    w1, w2, w3 = st.columns(3)
+    weight_pct = {
+        "bear": w1.number_input("Bear weight (%)", 0, 100, int(DEFAULT_WEIGHTS["bear"] * 100), 5,
+                                key="scenario_w_bear"),
+        "base": w2.number_input("Base weight (%)", 0, 100, int(DEFAULT_WEIGHTS["base"] * 100), 5,
+                                key="scenario_w_base"),
+        "bull": w3.number_input("Bull weight (%)", 0, 100, int(DEFAULT_WEIGHTS["bull"] * 100), 5,
+                                key="scenario_w_bull"),
+    }
+    weights = {k: v / 100 for k, v in weight_pct.items()}
+    expected_value = weighted_value(fair_values, weights)
+
+    st.markdown("#### Headline")
+    h1, h2, h3, h4 = st.columns(4)
+    h1.metric("Expected value / share", fmt_currency(expected_value, ccy),
+             help="Probability-weighted across Bear/Base/Bull using the weights above.")
+    h2.metric("Current price", fmt_currency(price, ccy))
+    if expected_value and price:
+        ev_upside = expected_value / price - 1
+        ev_verdict = ("Undervalued" if ev_upside > 0.10 else
+                      "Overvalued" if ev_upside < -0.10 else "Fairly valued")
+        ev_cls = ("verdict-under" if ev_upside > 0.10 else
+                  "verdict-over" if ev_upside < -0.10 else "verdict-fair")
+        h3.metric("Upside / downside", fmt_pct(ev_upside))
+        h4.markdown(f"**Verdict**<br><span class='{ev_cls}'>{ev_verdict}</span>", unsafe_allow_html=True)
+
+    # Diagnostic (not a correction): flag extreme base-case deviation and explain it via the
+    # market-implied growth already computed by the reverse DCF, instead of bending the number.
+    base_fv = fair_values.get("base")
+    if base_fv and price:
+        base_upside = base_fv / price - 1
+        if abs(base_upside) > DIAGNOSTIC_DEVIATION_THRESHOLD:
+            reverse = st.session_state.get("reverse")
+            base_growth = scenario_assumptions.get("base").stage1_growth if "base" in scenario_assumptions else None
+            if reverse and reverse.implied_growth is not None and base_growth is not None:
+                st.info(
+                    f"⚠️ **Base case is {base_upside:+.0%} vs price** — a large gap. The market is "
+                    f"pricing in ~**{reverse.implied_growth:.1%}** stage-1 growth; your base case "
+                    f"assumes **{base_growth:.1%}**. This is the assumption to interrogate — check "
+                    "the Bull case (which uses the analyst-high growth estimate) before concluding "
+                    "the model is wrong."
+                )
+            else:
+                st.info(
+                    f"⚠️ **Base case is {base_upside:+.0%} vs price** — a large gap worth "
+                    "double-checking your growth/margin assumptions against the Bull case below."
+                )
+
+    for w in base_result.warnings:
         st.warning(w)
 
-    st.markdown("#### Enterprise → Equity value bridge")
+    st.markdown("#### Bear · Base · Bull")
+    cols = st.columns(3)
+    for col, key in zip(cols, ("bear", "base", "bull")):
+        r = scenario_results[key]
+        fv = r.fair_value_per_share
+        with col:
+            with st.container(border=True):
+                st.markdown(f"**{SCENARIO_LABELS[key]}**")
+                st.metric("Fair value / share", fmt_currency(fv, ccy))
+                if fv and price:
+                    st.metric("Upside / downside", fmt_pct(fv / price - 1))
+                if key in scenario_assumptions:
+                    st.caption(_scenario_driver_summary(scenario_assumptions[key]))
+
+    with st.expander("Per-scenario assumptions (full detail)"):
+        if scenario_assumptions:
+            rows = []
+            for key in ("bear", "base", "bull"):
+                a = scenario_assumptions[key]
+                rows.append({
+                    "Scenario": SCENARIO_LABELS[key],
+                    "Stage-1 growth": fmt_pct(a.stage1_growth),
+                    "Terminal growth": fmt_pct(a.terminal_growth),
+                    "Hold years": a.hold_years,
+                    "Projection years": a.projection_years,
+                    "FCF margin → terminal": f"{fmt_pct(a.fcf_margin)} → {fmt_pct(a.fcf_margin_terminal)}",
+                    "Exit multiple": f"{a.exit_multiple:.1f}x",
+                    "WACC": fmt_pct(scenario_results[key].wacc),
+                })
+            st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+
+    st.markdown("#### Enterprise → Equity value bridge (Base case)")
     bridge = pd.DataFrame(
         {
             "Component": ["PV of explicit FCFF", "PV of terminal value", "Enterprise value",
                           "Less: net debt", "Equity value"],
-            "Value": [result.pv_fcff_total, result.pv_terminal_value, result.enterprise_value,
-                      -(data.net_debt or 0.0), result.equity_value],
+            "Value": [base_result.pv_fcff_total, base_result.pv_terminal_value, base_result.enterprise_value,
+                      -(data.net_debt or 0.0), base_result.equity_value],
         }
     )
     bridge["Value"] = bridge["Value"].map(lambda v: fmt_big(v, ccy))
     st.table(bridge.set_index("Component"))
 
     d1, d2, d3, d4 = st.columns(4)
-    d1.metric("WACC", fmt_pct(result.wacc))
-    d2.metric("Cost of equity", fmt_pct(result.cost_of_equity))
-    d3.metric("Terminal value % of EV", fmt_pct(result.terminal_pv_weight, 0))
+    d1.metric("WACC (all scenarios)", fmt_pct(base_result.wacc))
+    d2.metric("Cost of equity", fmt_pct(base_result.cost_of_equity))
+    d3.metric("Terminal value % of EV", fmt_pct(base_result.terminal_pv_weight, 0))
     d4.metric("Shares outstanding", fmt_big(data.shares_outstanding, ""))
 
-    st.markdown("#### Terminal value methods")
+    st.markdown("#### Terminal value methods (Base case)")
     tv = pd.DataFrame(
         {
             "Method": ["Gordon Growth", "Exit Multiple", "Used (average of selected)"],
             "Terminal value": [
-                fmt_big(result.tv_gordon, ccy) if result.tv_gordon else "—",
-                fmt_big(result.tv_exit, ccy) if result.tv_exit else "—",
-                fmt_big(result.terminal_value, ccy),
+                fmt_big(base_result.tv_gordon, ccy) if base_result.tv_gordon else "—",
+                fmt_big(base_result.tv_exit, ccy) if base_result.tv_exit else "—",
+                fmt_big(base_result.terminal_value, ccy),
             ],
         }
     )
     st.table(tv.set_index("Method"))
 
 
-def _render_projections(result, ccy) -> None:
-    if result is None:
+def _render_projections(scenario_results, ccy) -> None:
+    if not scenario_results:
         st.info("Generate a valuation to see the year-by-year projection.")
         return
+
+    st.markdown("#### Bear · Base · Bull — projected FCFF paths")
+    fig_cmp = go.Figure()
+    all_fcff = []
+    for key in ("bear", "base", "bull"):
+        r = scenario_results[key]
+        yrs = r.projection["Year"].astype(int).tolist()
+        fcff_vals = r.projection["FCFF"].tolist()
+        all_fcff.extend(fcff_vals)
+        fig_cmp.add_scatter(
+            x=yrs, y=fcff_vals, mode="lines+markers", name=SCENARIO_LABELS[key],
+            line=dict(color=SCENARIO_COLORS[key], width=2), marker=dict(size=7),
+        )
+    fig_cmp.update_layout(title="Projected FCFF by scenario (note: Bull runs longer — a "
+                          "compounding-growth hold before it fades)")
+    fig_cmp.update_xaxes(title="Year", dtick=1)
+    fig_cmp.update_yaxes(title=f"FCFF ({ccy})", range=_padded_range(all_fcff, zero_floor=False))
+    _slim_layout(fig_cmp, height=320, show_legend=True)
+    st.plotly_chart(fig_cmp, width="stretch")
+
+    st.markdown("#### Base case — year-by-year detail")
+    result = scenario_results["base"]
     df = result.projection.copy()
     disp = pd.DataFrame(
         {
@@ -418,7 +562,7 @@ def _render_projections(result, ccy) -> None:
             text=[fmt_big(v, ccy) if i in mask else "" for i, v in enumerate(revenue)],
             textposition="outside", cliponaxis=False,
         )
-        fig_rev.update_layout(title=f"Projected revenue ({n_years}Y)", bargap=0.35)
+        fig_rev.update_layout(title=f"Projected revenue — Base case ({n_years}Y)", bargap=0.35)
         fig_rev.update_xaxes(title="Year", dtick=1)
         fig_rev.update_yaxes(title=f"Revenue ({ccy})", range=_padded_range(revenue))
         _slim_layout(fig_rev, show_legend=False)
@@ -432,7 +576,7 @@ def _render_projections(result, ccy) -> None:
             text=[fmt_big(v, ccy) if i in mask else "" for i, v in enumerate(fcff)],
             textposition="top center",
         )
-        fig_fcff.update_layout(title=f"Projected FCFF ({n_years}Y)")
+        fig_fcff.update_layout(title=f"Projected FCFF — Base case ({n_years}Y)")
         fig_fcff.update_xaxes(title="Year", dtick=1)
         fig_fcff.update_yaxes(title=f"FCFF ({ccy})", range=_padded_range(fcff, zero_floor=False))
         _slim_layout(fig_fcff, show_legend=False)

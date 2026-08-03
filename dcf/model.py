@@ -23,6 +23,7 @@ class Assumptions:
     fcf_margin: float
     tax_rate: float
     fade_growth: bool = True  # linearly fade growth from stage1 (yr1) to terminal (yrN)
+    hold_years: int = 0  # hold stage1_growth flat this many years before fading (bull-case lever)
     fcf_margin_terminal: Optional[float] = None  # if set and != fcf_margin, fade margin too
 
     # WACC components (CAPM)
@@ -100,12 +101,21 @@ def compute_wacc(a: Assumptions) -> tuple[float, float, float]:
 
 
 def _growth_path(a: Assumptions) -> list[float]:
-    """Per-year revenue growth rates for years 1..N."""
+    """Per-year revenue growth rates for years 1..N.
+
+    Growth holds flat at stage1_growth for ``hold_years`` (a bull-case "compounding phase"
+    lever — e.g. a company still early in an S-curve) before fading linearly to terminal_growth
+    over the remaining years. ``hold_years=0`` reproduces the original all-years fade exactly.
+    """
     n = a.projection_years
     if not a.fade_growth or n <= 1:
         return [a.stage1_growth] * n
-    # Linear fade from stage1 (year 1) to terminal (year N).
-    return list(np.linspace(a.stage1_growth, a.terminal_growth, n))
+    hold = max(0, min(a.hold_years, n))
+    if hold >= n:
+        return [a.stage1_growth] * n
+    # Linear fade from stage1 (first faded year) to terminal (year N) over the remaining years.
+    fade = list(np.linspace(a.stage1_growth, a.terminal_growth, n - hold))
+    return [a.stage1_growth] * hold + fade
 
 
 def _margin_path(a: Assumptions) -> list[float]:

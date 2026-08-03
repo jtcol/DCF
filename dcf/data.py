@@ -92,6 +92,9 @@ class CompanyData:
     fcf_margin_peak: Optional[float] = None
     analyst_growth: Optional[float] = None
     analyst_growth_horizon: Optional[str] = None  # e.g. "long-term (5y)" or "next fiscal year"
+    # Analyst low/high next-fiscal-year revenue growth band (bear/bull scenario anchors)
+    analyst_growth_low: Optional[float] = None
+    analyst_growth_high: Optional[float] = None
 
     # Historical series (index = period end date, most recent first)
     hist_revenue: pd.Series = field(default_factory=pd.Series)
@@ -190,6 +193,36 @@ def _fetch_revenue_estimate_growth(tk: "yf.Ticker", period_label: str) -> Option
     if not np.isfinite(val):
         return None
     return float(np.clip(val, -0.50, 2.00))
+
+
+def _fetch_revenue_estimate_band(tk: "yf.Ticker", period_label: str) -> tuple[Optional[float], Optional[float]]:
+    """Analyst LOW/HIGH next-fiscal-year revenue growth, implied from yfinance's
+    ``revenue_estimate`` low/high $ estimates vs ``yearAgoRevenue`` (the same base the table's
+    own ``growth`` column is computed against). Anchors the bear/bull scenario growth rates in
+    the actual dispersion of analyst estimates rather than an arbitrary multiplier — this is
+    real analyst disagreement, not an invented range. Defensive end to end: returns (None, None)
+    on any missing property/row/column.
+    """
+    try:
+        re_df = tk.revenue_estimate
+    except Exception:
+        return None, None
+    if not isinstance(re_df, pd.DataFrame) or re_df.empty or period_label not in re_df.index:
+        return None, None
+    row = re_df.loc[period_label]
+    if not {"low", "high", "yearAgoRevenue"}.issubset(row.index):
+        return None, None
+    try:
+        base = float(row["yearAgoRevenue"])
+        low = float(row["low"])
+        high = float(row["high"])
+    except (TypeError, ValueError):
+        return None, None
+    if not np.isfinite(base) or base <= 0:
+        return None, None
+    growth_low = float(np.clip(low / base - 1, -0.75, 3.00))
+    growth_high = float(np.clip(high / base - 1, -0.75, 3.00))
+    return growth_low, growth_high
 
 
 def _fetch_analyst_growth(tk: "yf.Ticker") -> tuple[Optional[float], Optional[str]]:
@@ -358,6 +391,7 @@ def fetch_company_data(ticker: str) -> CompanyData:
             data.fcf_margin_peak = peak
 
     data.analyst_growth, data.analyst_growth_horizon = _fetch_analyst_growth(tk)
+    data.analyst_growth_low, data.analyst_growth_high = _fetch_revenue_estimate_band(tk, "+1y")
 
     # --- Record what is missing ------------------------------------------------------
     for fld, val in [
@@ -463,9 +497,12 @@ def compute_default_assumptions(data: CompanyData) -> dict:
         if peak_clipped > defaults["fcf_margin"]:
             defaults["fcf_margin_terminal"] = round(peak_clipped, 4)
 
-    # Analyst forward growth consensus — reference only, shown in the UI but never auto-applied.
+    # Analyst forward growth consensus — reference only, shown in the UI but never auto-applied
+    # to the Base case. The low/high band DOES feed the Bear/Bull scenario builder (scenarios.py).
     defaults["analyst_growth"] = data.analyst_growth
     defaults["analyst_growth_horizon"] = data.analyst_growth_horizon
+    defaults["analyst_growth_low"] = data.analyst_growth_low
+    defaults["analyst_growth_high"] = data.analyst_growth_high
 
     # Exit multiple from current EV/EBITDA if we can estimate EV.
     if data.ebitda and data.ebitda > 0 and data.market_cap:

@@ -6,7 +6,8 @@ A professional five-tab Streamlit app:
   a weekly 50/200-EMA **death-cross exit flag** (🟢/🟠/🔴, 3% buffer), 52-week range position,
   and a **DCF fair value at a fixed 10% WACC** with upside % per holding.
 - **📈 DCF Valuation** — estimate a company's per-share fair value with an unlevered (FCFF)
-  discounted cash flow model, using live Yahoo Finance data and editable smart defaults.
+  discounted cash flow model, using live Yahoo Finance data and editable smart defaults, run as
+  **Bear / Base / Bull scenarios** with a probability-weighted expected value.
 - **🎯 LEAPS Screener** — scan the US market for long-dated call (LEAPS) candidates: deeply
   oversold names still in an uptrend, with cheap option premium.
 - **🌊 Volatility Risk Premium** — rank Nasdaq-100 / S&P 500 / watchlist tickers by how *rich*
@@ -33,6 +34,10 @@ A professional five-tab Streamlit app:
   sanity-check whether your assumptions are more or less optimistic than the market.
 - **Historical financials & charts** plus a **Data Quality** panel that flags missing fields,
   short history, negative/volatile FCF, and the financial-sector FCFF caveat.
+- **Bear / Base / Bull scenarios** — your editable inputs define the **Base** case; **Bear** and
+  **Bull** are derived from it by documented, data-grounded rules (see Methodology below), not
+  invented from scratch and never tuned to land near the market price. A probability-weighted
+  **Expected value** (editable weights, default 25/50/25) sits above the three scenario cards.
 - **Ticker selection** via a searchable S&P 500 dropdown *and* a free-text box for any ticker.
 - **Quarterly-baseline dual DCF** (🧮 sub-tab) — a second, complementary method built from
   *actually reported* quarterly cash flows: ingest up to 6 quarters → strip 2σ outliers (with a
@@ -112,6 +117,7 @@ DCF/
     data.py              # yfinance fetch + cleaning + smart-default assumptions
     model.py             # WACC, FCFF projection, terminal value, fair value
     reverse_dcf.py       # implied-growth solver (bisection)
+    scenarios.py         # Bear/Base/Bull scenario builder + probability-weighted expected value
     sp500.py             # S&P 500 constituent list (live + fallback)
     nasdaq100.py         # Nasdaq-100 constituent list (live + fallback)
     quality.py           # data-quality flags
@@ -207,6 +213,12 @@ same need with no external dependency, no API key, and no ToS exposure at all.
 - After-tax cost of debt = `pre-tax cost of debt × (1 − tax)`
 - WACC = `equity weight × cost of equity + debt weight × after-tax cost of debt`
 - Risk-free rate defaults to the 10-Year Treasury yield (`^TNX`).
+- **Beta is clamped to [0.8, 1.6] for the auto-WACC calculation only** — a practitioner-standard
+  adjustment. An unclamped high beta (e.g. a name with β≈1.8) can push WACC alone high enough to
+  crush fair value before any cash-flow assumption is even considered; the clamp keeps the
+  discount rate from doing all the work. Raw beta is still shown in the caption when the clamp
+  bites, and typing your own WACC always overrides the auto calc regardless of this clamp. The
+  auto value is also floored/capped to **[6.5%, 14%]** as a final sanity band.
 
 **Terminal value:**
 - Gordon Growth: `FCFF_{N+1} / (WACC − g)`
@@ -214,6 +226,34 @@ same need with no external dependency, no API key, and no ToS exposure at all.
 - The app averages whichever methods you enable.
 
 **Fair value** = `(PV of explicit FCFF + PV of terminal value − net debt) / shares outstanding`.
+
+### Bear / Base / Bull scenarios
+
+Your editable inputs define the **Base** case exactly as described above. **Bear** and **Bull**
+are derived from Base by documented rules — grounded in real analyst dispersion and the
+company's own history, never invented and never tuned toward the market price:
+
+| Driver | Bear | Base | Bull |
+|---|---|---|---|
+| Stage-1 growth | `min(base, analyst-LOW estimate)`, clamped to [−15%, +15%] | your input | `max(base, analyst-HIGH, analyst-avg)`, clamped to ≤ 40% |
+| Growth shape | fades to terminal from year 1 | your fade setting | **holds Stage-1 growth flat for 3 years** (a compounding/S-curve phase) **then fades** — over 2 extra projection years so the fade isn't a cliff |
+| Terminal growth | `min(base, 2.0%)` | your input (2.5% default) | `min(base × 1.2, 3.0%)` |
+| Terminal FCF margin | `min(current margin, historical mean)` — no expansion assumed | your input (defaults to historical peak) | `max(base terminal, historical peak, TTM margin × 1.15)`, capped at 60% |
+| Exit multiple | `base × 0.8`, floor 4x | your input | `base × 1.2`, cap 30x |
+| **WACC** | **identical across all three** — scenarios flex cash flows, not risk (discounting bear/bull differently would double-count risk already reflected in the cash-flow spread) | | |
+
+- **Analyst low/high growth band** comes from yfinance's `revenue_estimate` next-fiscal-year
+  `low`/`high` columns vs. `yearAgoRevenue` — real analyst disagreement, not an arbitrary
+  multiplier. When unavailable, Bear/Bull fall back to `base × 0.5` / `base × 1.5` before the
+  guardrail clamps apply.
+- **Expected value** = probability-weighted average of the three fair values (default weights
+  25% / 50% / 25%, editable and auto-normalized).
+- **Outlier diagnostic, not correction:** if the Base case still deviates more than **±75%** from
+  the current price, the app shows an info panel comparing the reverse-DCF's market-implied
+  growth against your Base growth assumption — it explains the gap, it does not bend the number
+  toward price. A DCF's value is being an *independent* estimate; a wide Bear–Bull spread for a
+  volatile, high-uncertainty name (and a narrow spread for a mature, stable one) is itself a
+  correctness signal, not a flaw.
 
 ### LEAPS screener methodology
 
@@ -253,6 +293,8 @@ or *S&P 500* scope, or a universe limit, to test quickly.
 - Unlevered FCFF DCF is a **poor fit for banks, insurers, and REITs** (financing-driven cash
   flows). These are flagged, not blocked.
 - Always cross-check the model against the **reverse DCF** and the company's actual history.
+- The **Investment Portfolio** tab's quick DCF (fixed 10% WACC) stays single-scenario (Base
+  only) — it's a fast per-holding screen, not the full Bear/Base/Bull workup in the DCF tab.
 - **LEAPS "IV Rank/Percentile" is a proxy.** yfinance provides no historical implied volatility,
   so the screener ranks current IV against the stock's trailing **1-year realized-volatility**
   range — a stand-in for true IV Rank, clearly labeled as such.
