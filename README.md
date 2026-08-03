@@ -179,26 +179,28 @@ forward view — but it is **never applied automatically**; you decide whether t
 
 **Analyst growth reference — sources & priority.** Three sources are tried in order, and the
 label always names whichever one actually produced the figure (never mislabeled):
-1. **yfinance's long-term (~5y) estimate** — free, but Yahoo leaves this field empty for
-   essentially every individual stock in practice (confirmed across large-cap names spanning
-   several sectors), so this rarely resolves.
-2. **Finnhub's free-tier revenue-estimate API** (optional — set `FINNHUB_API_KEY` in `.env`; see
-   [finnhub.io/register](https://finnhub.io/register), no card required). Chosen deliberately as
-   a **revenue**-growth figure, not EPS, since the model's Stage-1 growth is a revenue growth
-   rate — an EPS-growth reference would be an apples-to-oranges comparison (EPS growth is also
-   moved by margin/buyback/leverage changes). When Finnhub has more than one forward fiscal-year
-   estimate, an implied multi-year CAGR is computed from the company's latest actual revenue;
-   otherwise it's a single next-fiscal-year growth figure — labeled accordingly either way.
-   Unset → skipped entirely, same as if the ticker had no data.
-3. **yfinance's next-fiscal-year (1y) estimate** — the final fallback, used when neither above
-   resolves.
+1. **yfinance's long-term (~5y) estimate** (`growth_estimates`, `LTG` row) — free, but Yahoo
+   leaves this field empty for essentially every individual stock in practice (confirmed across
+   large-cap names spanning several sectors), so this rarely resolves.
+2. **yfinance's `revenue_estimate` next-fiscal-year growth** — a separate, more detailed
+   yfinance property that carries Yahoo's own pre-computed forward **revenue** growth rate.
+   Chosen deliberately over an EPS-growth figure because the model's Stage-1 growth is itself a
+   revenue growth rate — an EPS-growth reference would be an apples-to-oranges comparison (EPS
+   growth is also moved by margin/buyback/leverage changes). Confirmed live to be populated for
+   every large-cap ticker tested across sectors (tech, autos, staples, financials,
+   semiconductors) — dramatically more reliable than the long-term field above.
+3. **yfinance's `growth_estimates` next-fiscal-year (EPS-based)** — final fallback, used only if
+   `revenue_estimate` is ever unavailable for a given ticker.
 
-**Why an API instead of scraping another site:** two scraping candidates were evaluated and
+**Why not an external API or scraping another site:** two scraping candidates were evaluated and
 rejected. `finviz.com` has a genuine 5-year EPS-growth figure and is technically fetchable, but
 its Terms of Service explicitly restrict automated scraping/reuse of its data — a real compliance
 risk, not a hypothetical one. `stockanalysis.com` actively blocks automated requests (HTTP 403).
-A free-tier financial-data API sidesteps both problems: no ToS risk, and a stable JSON contract
-instead of HTML that breaks on every redesign.
+A free-tier API (**Finnhub**) was also integrated and then removed after live testing: its
+`revenue-estimate` and `eps-estimate` endpoints both return a clean `403 "You don't have access
+to this resource"` on the free tier — those specific fields are paid-plan-gated, confirmed with
+a real API key, not assumed. yfinance's own `revenue_estimate` property turned out to cover the
+same need with no external dependency, no API key, and no ToS exposure at all.
 
 **WACC (CAPM):**
 - Cost of equity = `risk-free + β × equity risk premium`
@@ -251,13 +253,6 @@ or *S&P 500* scope, or a universe limit, to test quickly.
 - Unlevered FCFF DCF is a **poor fit for banks, insurers, and REITs** (financing-driven cash
   flows). These are flagged, not blocked.
 - Always cross-check the model against the **reverse DCF** and the company's actual history.
-- **The Finnhub revenue-estimate integration's exact response schema is best-effort, not
-  confirmed against a live authenticated call** (Finnhub's own docs/pricing pages are a
-  JavaScript-rendered site that couldn't be read during development). It's implemented
-  defensively — any missing field, unexpected shape, or free-tier restriction returns nothing
-  rather than crashing or guessing — but until verified with a real API key, treat "not
-  available for this ticker" as the expected default outcome, not necessarily a sign anything
-  is broken.
 - **LEAPS "IV Rank/Percentile" is a proxy.** yfinance provides no historical implied volatility,
   so the screener ranks current IV against the stock's trailing **1-year realized-volatility**
   range — a stand-in for true IV Rank, clearly labeled as such.

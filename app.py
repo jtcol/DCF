@@ -35,7 +35,7 @@ st.markdown(
 )
 
 # Bump this whenever code changes ship — lets you confirm the deployed app is current.
-APP_BUILD = "build 2026-07-18b · Finnhub analyst-growth source"
+APP_BUILD = "build 2026-07-18c · yfinance revenue_estimate analyst-growth"
 
 tcol, bcol = st.columns([3, 2])
 tcol.title("📈 Equity Toolkit")
